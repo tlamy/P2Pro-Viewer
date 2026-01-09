@@ -18,8 +18,10 @@ public:
 
 private:
     std::string title;
-    int width;
-    int height;
+    int baseWidth;
+    int baseHeight;
+    int currentWidth;
+    int currentHeight;
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
     SDL_Texture* texture = nullptr;
