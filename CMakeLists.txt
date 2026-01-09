@@ -28,6 +28,7 @@ add_executable(P2ProViewer
     src/P2Pro.cpp 
     src/CameraWindow.cpp
     src/MacOSAdapter.cpp
+    src/AVFoundationVideoSource.mm
 )
 
 target_link_libraries(P2ProViewer ${SDL2_LIBRARIES} ${LIBUSB_LIBRARIES} ${OpenCV_LIBS})
@@ -35,5 +36,17 @@ target_link_libraries(P2ProViewer ${SDL2_LIBRARIES} ${LIBUSB_LIBRARIES} ${OpenCV
 if(APPLE)
     find_library(IOKIT_FRAMEWORK IOKit)
     find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
-    target_link_libraries(P2ProViewer ${IOKIT_FRAMEWORK} ${COREFOUNDATION_FRAMEWORK})
+    find_library(FOUNDATION_FRAMEWORK Foundation)
+    find_library(AVFOUNDATION_FRAMEWORK AVFoundation)
+    find_library(COREMEDIA_FRAMEWORK CoreMedia)
+    find_library(COREVIDEO_FRAMEWORK CoreVideo)
+    target_link_libraries(P2ProViewer 
+        ${IOKIT_FRAMEWORK} 
+        ${COREFOUNDATION_FRAMEWORK}
+        ${FOUNDATION_FRAMEWORK}
+        ${AVFOUNDATION_FRAMEWORK}
+        ${COREMEDIA_FRAMEWORK}
+        ${COREVIDEO_FRAMEWORK}
+    )
+    set_source_files_properties(src/AVFoundationVideoSource.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 endif()

@@ -79,11 +79,8 @@ void MacOSAdapter::disconnect() {
     if (cap.isOpened()) {
         cap.release();
     }
-    if (ffmpeg_pipe) {
-        pclose(ffmpeg_pipe);
-        ffmpeg_pipe = nullptr;
-        use_ffmpeg_fallback = false;
-    }
+    native_cap.close();
+    use_native_cap = false;
     if (device_interface) {
         if (is_usb_open) {
             (*device_interface)->USBDeviceClose(device_interface);
@@ -124,43 +121,47 @@ bool MacOSAdapter::is_connected() const {
 bool MacOSAdapter::open_video() {
     dprintf("MacOSAdapter::open_video() - Searching for P2Pro Video Stream...\n");
     
-    // 1. Try to find the index via ffmpeg list_devices
-    int target_index = -1;
-    FILE* fp = popen("ffmpeg -f avfoundation -list_devices true -i \"\" 2>&1", "r");
-    if (fp) {
-        char buf[1024];
-        while (fgets(buf, sizeof(buf), fp)) {
-            // Looking for lines like: [AVFoundation @ ...] [1] USB-Kamera
-            if (strstr(buf, "USB-Kamera") || strstr(buf, "P2 Pro") || strstr(buf, "UVC Camera")) {
-                char* p = strchr(buf, '[');
-                if (p) {
-                    p = strchr(p + 1, '['); // Second '[' should be the index
-                    if (p) {
-                        target_index = atoi(p + 1);
-                        dprintf("MacOSAdapter::open_video() - Found camera by name via ffmpeg at index %d\n", target_index);
-                        break;
-                    }
-                }
-            }
+    // 1. Try Native AVFoundation first
+    std::vector<std::string> devices = AVFoundationVideoSource::listDevices();
+    std::string target_name = "";
+    for (const auto& name : devices) {
+        if (name.find("USB-Kamera") != std::string::npos || 
+            name.find("P2 Pro") != std::string::npos || 
+            name.find("UVC Camera") != std::string::npos) {
+            target_name = name;
+            break;
         }
-        pclose(fp);
     }
 
-    std::vector<int> indices_to_try;
-    if (target_index != -1) {
-        indices_to_try.push_back(target_index);
+    if (!target_name.empty()) {
+        dprintf("MacOSAdapter::open_video() - Found camera by name: %s. Attempting native open...\n", target_name.c_str());
+        if (native_cap.openByName(target_name, 256, 384, 25)) {
+            dprintf("MacOSAdapter::open_video() - Native AVFoundation matched P2Pro\n");
+            use_native_cap = true;
+            return true;
+        }
     }
-    // Add common indices as fallback
+
+    // 2. Fallback to index-based native search
+    for (int i = 0; i < (int)devices.size(); ++i) {
+        dprintf("MacOSAdapter::open_video() - Probing native index %d (%s)...\n", i, devices[i].c_str());
+        if (native_cap.open(i, 256, 384, 25)) {
+            // Check if we can get a frame (verification)
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            std::vector<uint8_t> dummy;
+            if (native_cap.getFrame(dummy)) {
+                dprintf("MacOSAdapter::open_video() - Native AVFoundation matched P2Pro on index %d\n", i);
+                use_native_cap = true;
+                return true;
+            }
+            native_cap.close();
+        }
+    }
+
+    // 3. Fallback to OpenCV index-based search (less robust, but native-ish)
     for (int i : {1, 0, 2, 3}) {
-        if (i != target_index) indices_to_try.push_back(i);
-    }
-
-    for (int i : indices_to_try) {
-        dprintf("MacOSAdapter::open_video() - Probing index %d...\n", i);
-        
-        // Try opening with OpenCV first (simplified strategies)
+        dprintf("MacOSAdapter::open_video() - Probing OpenCV index %d...\n", i);
         try {
-            // Strategy 1: Plain open
             cap.open(i, cv::CAP_AVFOUNDATION);
             if (cap.isOpened()) {
                 int w = (int)cap.get(cv::CAP_PROP_FRAME_WIDTH);
@@ -173,34 +174,14 @@ bool MacOSAdapter::open_video() {
                 cap.release();
             }
         } catch (...) {}
-
-        // Strategy 2: FFmpeg pipe (more robust for this camera on macOS)
-        std::string cmd = "ffmpeg -f avfoundation -framerate 25 -video_size 256x384 -i \"" + std::to_string(i) + "\" -f rawvideo -pix_fmt yuyv422 -loglevel quiet -";
-        ffmpeg_pipe = popen(cmd.c_str(), "r");
-        if (ffmpeg_pipe) {
-            // Read one full frame to verify
-            size_t frame_size = 256 * 384 * 2;
-            std::vector<uint8_t> dummy(frame_size);
-            size_t n = fread(dummy.data(), 1, frame_size, ffmpeg_pipe);
-            if (n == frame_size) {
-                dprintf("MacOSAdapter::open_video() - ffmpeg pipe matched P2Pro on index %d\n", i);
-                use_ffmpeg_fallback = true;
-                return true;
-            }
-            pclose(ffmpeg_pipe);
-            ffmpeg_pipe = nullptr;
-        }
     }
 
     return false;
 }
 
 bool MacOSAdapter::read_frame(std::vector<uint8_t>& frame_data) {
-    if (use_ffmpeg_fallback && ffmpeg_pipe) {
-        size_t frame_size = 256 * 384 * 2;
-        frame_data.resize(frame_size);
-        size_t n = fread(frame_data.data(), 1, frame_size, ffmpeg_pipe);
-        return (n == frame_size);
+    if (use_native_cap) {
+        return native_cap.getFrame(frame_data);
     }
 
     if (!cap.isOpened()) return false;

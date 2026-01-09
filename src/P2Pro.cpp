@@ -68,11 +68,53 @@ bool P2Pro::get_frame(P2ProFrame& out_frame) {
     }
 
     // Split raw_data
-    // Top 256x192 is pseudo-color (YUYV)
-    // Bottom 256x192 is thermal (Y16)
+    // One half is pseudo-color (YUYV), one half is thermal (Y16).
+    // Usually: Top 256x192 is pseudo-color, Bottom 256x192 is thermal.
+    // However, depending on backend or camera version, they might be swapped.
+    // We detect which is which by calculating the variance/difference between 
+    // the bytes that would be U and V in a YUYV image. 
+    // In Y16 data (L0, H0, L1, H1), U=H0 and V=H1, which are almost identical.
+    // In Pseudo-color YUYV, U and V differ significantly.
     
+    const size_t half_size = 256 * 192 * 2;
+    long top_uv_diff = 0;
+    long bot_uv_diff = 0;
+    
+    // Sample a few pixels to determine which half is pseudo-color
+    for (size_t i = 0; i < half_size; i += 8) {
+        // Index 1 and 3 are U0 and V0 components when interpreted as YUYV
+        top_uv_diff += std::abs((int)raw_data[i+1] - (int)raw_data[i+3]);
+    }
+    for (size_t i = half_size; i < half_size * 2; i += 8) {
+        bot_uv_diff += std::abs((int)raw_data[i+1] - (int)raw_data[i+3]);
+    }
+
+    uint8_t* pseudo_ptr;
+    uint8_t* thermal_ptr;
+    bool swapped = false;
+    
+    if (bot_uv_diff > top_uv_diff) {
+        // Bottom half has more color variance, it's likely the pseudo-color image
+        pseudo_ptr = raw_data.data() + half_size;
+        thermal_ptr = raw_data.data();
+        swapped = true;
+    } else {
+        // Top half is likely pseudo-color
+        pseudo_ptr = raw_data.data();
+        thermal_ptr = raw_data.data() + half_size;
+    }
+
+    static bool first_detection = true;
+    static bool last_swapped = false;
+    if (first_detection || swapped != last_swapped) {
+        dprintf("P2Pro::get_frame() - Auto-detect: %s (Top UV diff sum: %ld, Bot UV diff sum: %ld)\n", 
+                swapped ? "Swapped (Pseudo in bottom)" : "Standard (Pseudo in top)", top_uv_diff, bot_uv_diff);
+        first_detection = false;
+        last_swapped = swapped;
+    }
+
     // YUYV to RGB
-    cv::Mat yuyv(192, 256, CV_8UC2, raw_data.data());
+    cv::Mat yuyv(192, 256, CV_8UC2, pseudo_ptr);
     cv::Mat rgb;
     cv::cvtColor(yuyv, rgb, cv::COLOR_YUV2RGB_YUY2);
 
@@ -80,8 +122,7 @@ bool P2Pro::get_frame(P2ProFrame& out_frame) {
     out_frame.rgb.assign(rgb.data, rgb.data + (256 * 192 * 3));
 
     // Extract thermal data
-    // It starts at offset 256 * 192 * 2
-    uint16_t* thermal_raw = (uint16_t*)(raw_data.data() + (256 * 192 * 2));
+    uint16_t* thermal_raw = (uint16_t*)thermal_ptr;
     out_frame.thermal.assign(thermal_raw, thermal_raw + (256 * 192));
 
     return true;
