@@ -21,18 +21,37 @@ bool CameraWindow::init() {
     }
 
     dprintf("CameraWindow::init() - Creating window...\n");
-    window = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, baseWidth, baseHeight, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    window = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, baseWidth, baseHeight, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     if (!window) {
         dprintf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
         return false;
     }
 
     dprintf("CameraWindow::init() - Creating renderer...\n");
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer) {
         dprintf("Renderer could not be created! SDL_Error: %s\n", SDL_GetError());
         return false;
     }
+
+    // Detect HiDPI scale
+    int ww, wh, rw, rh;
+    SDL_GetWindowSize(window, &ww, &wh);
+    SDL_GetRendererOutputSize(renderer, &rw, &rh);
+    float scale = (float)rw / (float)ww;
+
+    if (scale > 1.0f) {
+        dprintf("CameraWindow::init() - HiDPI detected (scale: %.1fx). Scaling initial window 2x...\n", scale);
+        currentWidth = baseWidth * 2;
+        currentHeight = baseHeight * 2;
+        SDL_SetWindowSize(window, currentWidth, currentHeight);
+    } else {
+        dprintf("CameraWindow::init() - Standard DPI detected.\n");
+        currentWidth = baseWidth;
+        currentHeight = baseHeight;
+    }
+
+    SDL_ShowWindow(window);
 
     dprintf("CameraWindow::init() - Creating texture...\n");
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, baseWidth, baseHeight);
