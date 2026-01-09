@@ -1,0 +1,8 @@
+ffmpeg==1.4
+kivy==2.3.1
+numpy
+opencv_python==4.12.0.88
+pyaudio==0.2.14
+pyudev==0.24.4
+pyusb==1.3.1
+watchdog==6.0.0

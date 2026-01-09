@@ -74,14 +74,18 @@ class CmdCode(enum.IntEnum):
     y16_preview_start = 0x010a
     y16_preview_stop = 0x020a
 
+log = logging.getLogger(__name__)
 
 class P2Pro:
     _dev: usb.core.Device
 
     def __init__(self):
+        log.info(f"Searching for P2 Pro USB device (VID: {0x0BDA:#06x}, PID: {0x5830:#06x})...")
         self._dev = usb.core.find(idVendor=0x0BDA, idProduct=0x5830)
         if (self._dev == None):
+            log.error("Infiray P2 Pro thermal module not found!")
             raise FileNotFoundError("Infiray P2 Pro thermal module not found, please connect and try again!")
+        log.info(f"Found P2 Pro USB device: {self._dev.product} ({self._dev.manufacturer})")
         pass
 
     def _check_camera_ready(self) -> bool:

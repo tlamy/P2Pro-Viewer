@@ -32,11 +32,13 @@ class Video:
         available_ids = []
         log.info("Probing video capture ports...")
         while len(non_working_ids) < 6:  # if there are more than 5 non working ports stop the testing.
+            log.info(f"Testing video capture port {dev_port}... ")
             camera = cv2.VideoCapture(dev_port)
             log.info(f"Testing video capture port {dev_port}... ")
             if not camera.isOpened():
                 log.info("Not working.")
                 non_working_ids.append(dev_port)
+                camera.release()
             else:
                 is_reading, img = camera.read()
                 w = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -50,7 +52,7 @@ class Video:
                 else:
                     # print("Port %s for camera ( %s x %s) is present but does not reads." %(dev_port,w,h))
                     available_ids.append(dev_port)
-
+                camera.release()
             dev_port += 1
         return working_ids, available_ids, non_working_ids
 
@@ -58,16 +60,26 @@ class Video:
     # On Linux, just use the VID/PID via udev
     def get_P2Pro_cap_id(self):
         if platform.system() == 'Linux':
+            log.info("Scanning USB bus for P2 Pro via udev...")
             for device in pyudev.Context().list_devices(subsystem='video4linux'):
-                if (int(device.get('ID_USB_VENDOR_ID'), 16), int(device.get('ID_USB_MODEL_ID'), 16)) == P2Pro_usb_id and \
-                        'capture' in device.get('ID_V4L_CAPABILITIES'):
-                    return device.get('DEVNAME')
+                vendor_id = device.get('ID_USB_VENDOR_ID')
+                model_id = device.get('ID_USB_MODEL_ID')
+                dev_name = device.get('DEVNAME')
+                capabilities = device.get('ID_V4L_CAPABILITIES')
+                log.info(f"Found device: {dev_name} (VID: {vendor_id}, PID: {model_id}, Caps: {capabilities})")
+                if (int(vendor_id, 16), int(model_id, 16)) == P2Pro_usb_id and \
+                        'capture' in capabilities:
+                    log.info(f"Matched P2 Pro: {dev_name}")
+                    return dev_name
             return None
 
         # Fallback that uses the resolution and framerate to identify the device
+        log.info("Scanning for P2 Pro via resolution/FPS match...")
         working_ids, _, _ = self.list_cap_ids()
         for id in working_ids:
+            log.info(f"Checking port {id[0]}: {id[1]} @ {id[2]} FPS")
             if id[1] == P2Pro_resolution and id[2] == P2Pro_fps:
+                log.info(f"Matched P2 Pro on port {id[0]}")
                 return id[0]
         return None
 
@@ -77,6 +89,7 @@ class Video:
             camera_id = self.get_P2Pro_cap_id()
             if camera_id == None:
                 raise ConnectionError(f"Could not find camera module")
+            log.info(f"Scanning found P2 Pro module at {camera_id}")
 
         # check if video capture can be opened
         cap = cv2.VideoCapture(camera_id)

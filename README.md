@@ -10,6 +10,17 @@ The communication protocol was reverse-engineered, to avoid needing to include t
 **Disclaimer**: This is my first big Python multi-module project. So there are bound to be horrific architectural decisions and many other beginner's mistakes. Please excuse that.  
 The premise is to get to the first milestone with as little premature optimization as possible, otherwise I would never arrive there.
 
+# Getting started
+Create and activate a venv:
+```
+python3 -m venv venv
+source venv/bin/activate
+```
+and install the project dependencies:
+```
+pip install -r requirements.txt
+```
+
 ## Notices
 ### Windows
 For sending vendor control transfers to the UVC camera in addition to opening the camera as a normal UVC camera, libusb needs to be installed as an upper filter driver.  
