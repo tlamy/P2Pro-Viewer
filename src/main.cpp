@@ -18,7 +18,7 @@ int main(int argc, char* argv[]) {
 
         dprintf("Initializing P2Pro camera object...\n");
         P2Pro camera;
-        dprintf("Searching for P2Pro camera...\n");
+        dprintf("Connecting to P2Pro camera (USB and Video)...\n");
         
         bool cameraConnected = camera.connect();
         if (cameraConnected) {
@@ -34,70 +34,18 @@ int main(int argc, char* argv[]) {
 
             camera.pseudo_color_set(0, PseudoColorTypes::PSEUDO_IRON_RED);
         } else {
-            dprintf("Could not find or connect to P2Pro camera via libusb. Commands will not work.\n");
-        }
-
-        // OpenCV Video Capture
-        dprintf("Searching for P2Pro Video Stream via OpenCV...\n");
-        cv::VideoCapture cap;
-        bool capOpened = false;
-
-        // Try to find the camera by resolution (256x384 @ 25fps)
-        // On macOS/Linux/Windows this might vary, but let's try a few indices
-        for (int i = 0; i < 10; ++i) {
-            dprintf("Trying OpenCV index %d...\n", i);
-            cap.open(i);
-            if (cap.isOpened()) {
-                int w = (int)cap.get(cv::CAP_PROP_FRAME_WIDTH);
-                int h = (int)cap.get(cv::CAP_PROP_FRAME_HEIGHT);
-                double fps = cap.get(cv::CAP_PROP_FPS);
-                dprintf("Index %d opened: %dx%d @ %.1f FPS\n", i, w, h, fps);
-                if (w == 256 && h == 384) {
-                    dprintf("Found P2Pro Video Stream on index %d\n", i);
-                    capOpened = true;
-                    break;
-                }
-                cap.release();
-            } else {
-                dprintf("Index %d could not be opened.\n", i);
-            }
-        }
-
-        if (!capOpened) {
-            dprintf("Could not find P2Pro Video Stream.\n");
-        } else {
-            dprintf("Setting CAP_PROP_CONVERT_RGB to 0...\n");
-            cap.set(cv::CAP_PROP_CONVERT_RGB, 0); // Disable automatic conversion if possible
+            dprintf("Could not find or connect to P2Pro camera. Please ensure it is plugged in.\n");
+            return -1;
         }
 
         dprintf("Entering main loop...\n");
         bool running = true;
-        cv::Mat frame;
         while (running) {
             window.pollEvents(running);
             
-            if (capOpened && cap.read(frame)) {
-                // dprintf("Frame read: %dx%d\n", frame.cols, frame.rows);
-                // frame is 256x384 YUYV (effectively 256x384 uint8_t in some backends, 
-                // or 256x384x2 if YUYV is treated as 2 bytes per pixel)
-                // In Python: picture_data = frame[0:frame_mid_pos], thermal_data = frame[frame_mid_pos:]
-                
-                // If OpenCV returns YUYV as a 384x256 image with 2 channels:
-                if (frame.rows == 384 && frame.cols == 256) {
-                    cv::Mat pseudo_yuyv = frame(cv::Rect(0, 0, 256, 192));
-                    cv::Mat pseudo_rgb;
-                    cv::cvtColor(pseudo_yuyv, pseudo_rgb, cv::COLOR_YUV2RGB_YUY2);
-                    
-                    std::vector<uint8_t> rgb_vec;
-                    if (pseudo_rgb.isContinuous()) {
-                        rgb_vec.assign(pseudo_rgb.data, pseudo_rgb.data + pseudo_rgb.total() * pseudo_rgb.channels());
-                    } else {
-                        for (int i = 0; i < pseudo_rgb.rows; ++i) {
-                            rgb_vec.insert(rgb_vec.end(), pseudo_rgb.ptr<uint8_t>(i), pseudo_rgb.ptr<uint8_t>(i) + pseudo_rgb.cols * 3);
-                        }
-                    }
-                    window.updateFrame(rgb_vec, 256, 192);
-                }
+            P2ProFrame frame;
+            if (cameraConnected && camera.get_frame(frame)) {
+                window.updateFrame(frame.rgb, 256, 192);
             }
 
             window.render();

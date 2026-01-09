@@ -28,7 +28,6 @@ add_executable(P2ProViewer
     src/P2Pro.cpp 
     src/CameraWindow.cpp
     src/MacOSAdapter.cpp
-        src/MacOSAdapter.cpp
 )
 
 target_link_libraries(P2ProViewer ${SDL2_LIBRARIES} ${LIBUSB_LIBRARIES} ${OpenCV_LIBS})

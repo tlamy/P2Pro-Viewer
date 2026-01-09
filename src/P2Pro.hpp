@@ -45,6 +45,11 @@ enum class DeviceInfoType : uint16_t {
     DEV_INFO_GET_SENSOR_ID = 8
 };
 
+struct P2ProFrame {
+    std::vector<uint8_t> rgb;      // 256x192x3
+    std::vector<uint16_t> thermal; // 256x192
+};
+
 class P2Pro {
 public:
     P2Pro();
@@ -52,6 +57,8 @@ public:
 
     bool connect();
     void disconnect();
+
+    bool get_frame(P2ProFrame& frame);
 
     void pseudo_color_set(int preview_path, PseudoColorTypes color_type);
     PseudoColorTypes pseudo_color_get(int preview_path = 0);

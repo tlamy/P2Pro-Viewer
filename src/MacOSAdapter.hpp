@@ -4,6 +4,7 @@
 #include "USBAdapter.hpp"
 #include <IOKit/usb/IOUSBLib.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <opencv2/opencv.hpp>
 
 class MacOSAdapter : public USBAdapter {
 public:
@@ -18,8 +19,15 @@ public:
 
     bool is_connected() const override;
 
+    bool open_video() override;
+    bool read_frame(std::vector<uint8_t>& frame_data) override;
+
 private:
     IOUSBDeviceInterface **device_interface = nullptr;
+    bool is_usb_open = false;
+    cv::VideoCapture cap;
+    FILE* ffmpeg_pipe = nullptr;
+    bool use_ffmpeg_fallback = false;
 };
 
 #endif

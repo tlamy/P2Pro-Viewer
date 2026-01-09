@@ -16,6 +16,9 @@ public:
                                  uint8_t* data, uint16_t length, unsigned int timeout_ms) = 0;
 
     virtual bool is_connected() const = 0;
+
+    virtual bool open_video() = 0;
+    virtual bool read_frame(std::vector<uint8_t>& frame_data) = 0;
 };
 
 #endif

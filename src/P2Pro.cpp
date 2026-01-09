@@ -5,6 +5,7 @@
 #include <chrono>
 #include <thread>
 #include <cstring>
+#include <opencv2/opencv.hpp>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -38,11 +39,52 @@ P2Pro::~P2Pro() {
 }
 
 bool P2Pro::connect() {
-    return adapter->connect(VID, PID);
+    // 1. Try to connect via USB for control commands first.
+    if (!adapter->connect(VID, PID)) {
+        dprintf("P2Pro::connect() - Failed to connect via USB for commands.\n");
+        return false;
+    }
+
+    // 2. Then try to open video stream.
+    if (!adapter->open_video()) {
+        dprintf("P2Pro::connect() - Failed to open video stream.\n");
+        return false;
+    }
+    
+    return true;
 }
 
 void P2Pro::disconnect() {
     adapter->disconnect();
+}
+
+bool P2Pro::get_frame(P2ProFrame& out_frame) {
+    std::vector<uint8_t> raw_data;
+    if (!adapter->read_frame(raw_data)) return false;
+
+    // Expected size: 256 * 384 * 2 = 196608
+    if (raw_data.size() < 196608) {
+        return false;
+    }
+
+    // Split raw_data
+    // Top 256x192 is pseudo-color (YUYV)
+    // Bottom 256x192 is thermal (Y16)
+    
+    // YUYV to RGB
+    cv::Mat yuyv(192, 256, CV_8UC2, raw_data.data());
+    cv::Mat rgb;
+    cv::cvtColor(yuyv, rgb, cv::COLOR_YUV2RGB_YUY2);
+
+    // Copy RGB data
+    out_frame.rgb.assign(rgb.data, rgb.data + (256 * 192 * 3));
+
+    // Extract thermal data
+    // It starts at offset 256 * 192 * 2
+    uint16_t* thermal_raw = (uint16_t*)(raw_data.data() + (256 * 192 * 2));
+    out_frame.thermal.assign(thermal_raw, thermal_raw + (256 * 192));
+
+    return true;
 }
 
 bool P2Pro::check_camera_ready() {
