@@ -121,19 +121,23 @@ void CameraWindow::updateFrame(const std::vector<uint8_t>& rgb_data, int w, int 
     SDL_UpdateTexture(texture, NULL, rgb_data.data(), w * 3);
 }
 
-void CameraWindow::render(bool isRecording, bool indicatorVisible, const HotSpotResult& hotSpot) {
+void CameraWindow::render(bool isRecording, bool indicatorVisible, bool isConnected, const HotSpotResult& hotSpot) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, NULL, NULL);
+    
+    if (isConnected) {
+        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        renderHotSpot(hotSpot);
 
-    renderHotSpot(hotSpot);
+        if (mouseOverButton) {
+            renderRecordButton(isRecording);
+        }
 
-    if (mouseOverButton) {
-        renderRecordButton(isRecording);
-    }
-
-    if (isRecording && indicatorVisible) {
-        renderIndicator();
+        if (isRecording && indicatorVisible) {
+            renderIndicator();
+        }
+    } else {
+        renderScanningMessage();
     }
 
     SDL_RenderPresent(renderer);
@@ -182,6 +186,28 @@ void CameraWindow::renderIndicator() {
     int radius = 8;
     SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
     drawFilledCircle(renderer, padding + radius, padding + radius, radius);
+}
+
+void CameraWindow::renderScanningMessage() {
+    std::string msg = "Searching for P2Pro camera...";
+    
+    double fontScale = 0.5;
+    int baseLine;
+    cv::Size textSize = cv::getTextSize(msg, cv::FONT_HERSHEY_SIMPLEX, fontScale, 1, &baseLine);
+    
+    cv::Mat textMat = cv::Mat::zeros(textSize.height + baseLine + 4, textSize.width + 4, CV_8UC4);
+    cv::putText(textMat, msg, cv::Point(2, textSize.height + 2), cv::FONT_HERSHEY_SIMPLEX, fontScale, cv::Scalar(255, 255, 255, 255), 1, cv::LINE_AA);
+    
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom(textMat.data, textMat.cols, textMat.rows, 32, textMat.cols * 4, SDL_PIXELFORMAT_BGRA32);
+    if (surface) {
+        SDL_Texture* msgTexture = SDL_CreateTextureFromSurface(renderer, surface);
+        if (msgTexture) {
+            SDL_Rect dstRect = { (currentWidth - surface->w) / 2, (currentHeight - surface->h) / 2, surface->w, surface->h };
+            SDL_RenderCopy(renderer, msgTexture, NULL, &dstRect);
+            SDL_DestroyTexture(msgTexture);
+        }
+        SDL_FreeSurface(surface);
+    }
 }
 
 void CameraWindow::renderHotSpot(const HotSpotResult& hotSpot) {

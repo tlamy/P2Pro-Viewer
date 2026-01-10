@@ -19,6 +19,7 @@ LinuxAdapter::~LinuxAdapter() {
 
 bool LinuxAdapter::connect(uint16_t vid, uint16_t pid) {
     if (!ctx) return false;
+    if (dev_handle) return true;
 
     dprintf("LinuxAdapter::connect() - Searching for device VID: 0x%04X, PID: 0x%04X\n", vid, pid);
     dev_handle = libusb_open_device_with_vid_pid(ctx, vid, pid);
@@ -67,6 +68,7 @@ bool LinuxAdapter::is_connected() const {
 }
 
 bool LinuxAdapter::open_video() {
+    if (cap.isOpened()) return true;
     dprintf("LinuxAdapter::open_video() - Searching for P2Pro Video Stream...\n");
 
     // On Linux, P2Pro usually shows up as /dev/videoX.

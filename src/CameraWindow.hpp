@@ -14,7 +14,7 @@ public:
     bool init();
     void pollEvents(bool& running, bool& recordToggleRequested);
     void updateFrame(const std::vector<uint8_t>& rgb_data, int w, int h);
-    void render(bool isRecording, bool indicatorVisible, const HotSpotResult& hotSpot = {});
+    void render(bool isRecording, bool indicatorVisible, bool isConnected, const HotSpotResult& hotSpot = {});
 
 private:
     std::string title;
@@ -27,6 +27,7 @@ private:
     int mouseY = 0;
     bool mouseOverButton = false;
     bool darkOutline = true;
+    bool isScanning = false;
 
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
@@ -36,6 +37,7 @@ private:
     void renderRecordButton(bool isRecording);
     void renderIndicator();
     void renderHotSpot(const HotSpotResult& hotSpot);
+    void renderScanningMessage();
 };
 
 #endif

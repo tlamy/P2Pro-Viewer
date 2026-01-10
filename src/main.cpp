@@ -187,7 +187,9 @@ int main(int argc, char* argv[]) {
         dprintf("Connecting to P2Pro camera (USB and Video)...\n");
         
         bool cameraConnected = camera.connect();
-        if (cameraConnected) {
+        if (!cameraConnected) {
+            dprintf("Could not find or connect to P2Pro camera. Entering scanning mode...\n");
+        } else {
             dprintf("Connected to P2Pro camera!\n");
             
             auto pn = camera.get_device_info(DeviceInfoType::DEV_INFO_GET_PN);
@@ -199,9 +201,6 @@ int main(int argc, char* argv[]) {
             dprintf("\n");
 
             camera.pseudo_color_set(0, PseudoColorTypes::PSEUDO_IRON_RED);
-        } else {
-            dprintf("Could not find or connect to P2Pro camera. Please ensure it is plugged in.\n");
-            return -1;
         }
 
         dprintf("Entering main loop...\n");
@@ -210,13 +209,26 @@ int main(int argc, char* argv[]) {
         HotSpotTracker tracker;
         bool indicatorVisible = true;
         auto lastBlinkTime = std::chrono::steady_clock::now();
+        auto lastConnectAttempt = std::chrono::steady_clock::now();
         bool recordToggleRequested = false;
         HotSpotResult hs;
 
         while (running) {
             window.pollEvents(running, recordToggleRequested);
             
-            if (recordToggleRequested) {
+            if (!cameraConnected) {
+                auto now = std::chrono::steady_clock::now();
+                if (std::chrono::duration_cast<std::chrono::seconds>(now - lastConnectAttempt).count() >= 1) {
+                    lastConnectAttempt = now;
+                    if (camera.connect()) {
+                        dprintf("Reconnected to P2Pro camera!\n");
+                        cameraConnected = true;
+                        camera.pseudo_color_set(0, PseudoColorTypes::PSEUDO_IRON_RED);
+                    }
+                }
+            }
+
+            if (recordToggleRequested && cameraConnected) {
                 if (recorder.isRecording()) {
                     recorder.stop();
                 } else {
@@ -226,21 +238,32 @@ int main(int argc, char* argv[]) {
             }
 
             P2ProFrame frame;
-            if (cameraConnected && camera.get_frame(frame)) {
-                hs = detectHotSpot(frame, hs.found);
-                tracker.update(hs, frame);
-                
-                // Update window with clean frame (overlay rendered separately)
-                window.updateFrame(frame.rgb, 256, 192);
-                
-                if (recorder.isRecording()) {
-                    P2ProFrame annotated = frame;
-                    annotateFrame(annotated, hs);
-                    recorder.writeFrame(annotated.rgb);
+            if (cameraConnected) {
+                if (camera.get_frame(frame)) {
+                    hs = detectHotSpot(frame, hs.found);
+                    tracker.update(hs, frame);
+                    
+                    // Update window with clean frame (overlay rendered separately)
+                    window.updateFrame(frame.rgb, 256, 192);
+                    
+                    if (recorder.isRecording()) {
+                        P2ProFrame annotated = frame;
+                        annotateFrame(annotated, hs);
+                        recorder.writeFrame(annotated.rgb);
+                    }
+                } else {
+                    dprintf("Camera disconnected!\n");
+                    cameraConnected = false;
+                    camera.disconnect();
+                    if (recorder.isRecording()) {
+                        dprintf("Stopping recording due to disconnection.\n");
+                        recorder.stop();
+                    }
+                    hs.found = false;
                 }
             }
 
-            window.render(recorder.isRecording(), indicatorVisible, hs);
+            window.render(recorder.isRecording(), indicatorVisible, cameraConnected, hs);
 
             if (recorder.isRecording()) {
                 auto now = std::chrono::steady_clock::now();

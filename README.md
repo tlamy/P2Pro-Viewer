@@ -1,24 +1,25 @@
 # InfiRay P2 Pro Viewer
 
+Original work (in Python) by [LeoDJ](https://github.com/LeoDJ/P2Pro-Viewer) and [Pinoerkel](https://github.com/Pinoerkel/P2Pro-Viewer).
+
+I basically took the reverse-engineered protocol and let AI build the rest.
+
 :warning: **[WIP]**  
-See [below](#roadmap) for a roadmap.
+See [below](#roadmap) for the original roadmap.
 
 This project aims to be an open-source image viewer and API for the InfiRay P2 Pro thermal camera module.
 
 The communication protocol was reverse-engineered, to avoid needing to include the proprietary precompiled InfiRay libraries.
 
-**Disclaimer**: This is my first big Python multi-module project. So there are bound to be horrific architectural decisions and many other beginner's mistakes. Please excuse that.  
-The premise is to get to the first milestone with as little premature optimization as possible, otherwise I would never arrive there.
 
-# Getting started
-Create and activate a venv:
+# Compiling
+## MacOS
 ```
-python3 -m venv venv
-source venv/bin/activate
+brew install sdl2 libusb opencv
 ```
-and install the project dependencies:
+## Linux (Debian/Ubuntu)
 ```
-pip install -r requirements.txt
+sudo apt install libsdl2-dev libusb-1.0-0-dev libopencv-dev
 ```
 
 ## Notices
@@ -63,7 +64,7 @@ Pergear also has [an international shop](https://www.pergear.com/products/infira
 - [General discussion thread with some interesting resources](https://www.eevblog.com/forum/thermal-imaging/infiray-and-their-p2-pro-discussion/)
 
 
-## Roadmap
+## (Original) Roadmap
 - [ ] USB Vendor Commands
     - [x] Read/Write commands
         - [x] "standard" cmd
@@ -93,16 +94,16 @@ Pergear also has [an international shop](https://www.pergear.com/products/infira
     - [ ] Find / build tool to analyze recordings later (or export to other formats)
     - [ ] Virtual webcam output with temperature scale overlays?
 - [ ] GUI
-    - [ ] Display video stream
+    - [x] Display video stream
     - [ ] Overlays
         - [ ] Temperature scale
-        - [ ] Min/max/center temperature
+        - [x] Min/max/center temperature
         - [ ] Cursor hover temperature
     - [ ] Palette selection
     - [ ] Shutter control
     - [ ] Gain selection (camera temperature range)
     - [ ] Parameters (emissivity, distance, etc)
-    - [ ] Recording controls (take picture, start/stop video, recording indicator and time)
+    - [x] Recording controls (take picture, start/stop video, recording indicator and time)
     - [ ] Image rotation / flip
     - [ ] Manually set min/max range (probably need to apply own pseudo color from raw temperature data)
     - [ ] Own analysis controls (points, lines, rectangles, etc)

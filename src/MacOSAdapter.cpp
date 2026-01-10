@@ -14,6 +14,7 @@ MacOSAdapter::~MacOSAdapter() {
 }
 
 bool MacOSAdapter::connect(uint16_t vid, uint16_t pid) {
+    if (device_interface) return true;
     dprintf("MacOSAdapter::connect() - Searching for device VID: 0x%04X, PID: 0x%04X (IOKit)\n", vid, pid);
     
     CFMutableDictionaryRef matchingDict = IOServiceMatching(kIOUSBDeviceClassName);
@@ -119,6 +120,7 @@ bool MacOSAdapter::is_connected() const {
 }
 
 bool MacOSAdapter::open_video() {
+    if (use_native_cap || cap.isOpened()) return true;
     dprintf("MacOSAdapter::open_video() - Searching for P2Pro Video Stream...\n");
     
     // 1. Try Native AVFoundation first
