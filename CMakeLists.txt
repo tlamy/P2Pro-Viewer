@@ -23,14 +23,24 @@ endif()
 include_directories(${SDL2_INCLUDE_DIRS} ${LIBUSB_INCLUDE_DIR} ${OpenCV_INCLUDE_DIRS})
 link_directories(${LIBUSB_LIBRARY_DIRS})
 
-add_executable(P2ProViewer 
-    src/main.cpp 
-    src/P2Pro.cpp 
-    src/CameraWindow.cpp
-    src/MacOSAdapter.cpp
-    src/AVFoundationVideoSource.mm
-    src/VideoRecorder.cpp
-)
+if (APPLE)
+    add_executable(P2ProViewer
+            src/main.cpp
+            src/P2Pro.cpp
+            src/CameraWindow.cpp
+            src/MacOSAdapter.cpp
+            src/AVFoundationVideoSource.mm
+            src/VideoRecorder.cpp
+    )
+else ()
+    add_executable(P2ProViewer
+            src/main.cpp
+            src/P2Pro.cpp
+            src/CameraWindow.cpp
+            src/VideoRecorder.cpp
+            src/LinuxAdapter.cpp
+    )
+endif ()
 
 target_link_libraries(P2ProViewer ${SDL2_LIBRARIES} ${LIBUSB_LIBRARIES} ${OpenCV_LIBS})
 

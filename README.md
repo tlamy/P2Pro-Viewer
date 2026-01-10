@@ -32,7 +32,26 @@ This can be installed relatively easily using Zadig.
 Also, the camera video stream needs to be opened first before using the script to send commands to it, otherwise the call to libusb will just hang for whatever reason.
 
 ### Linux
-Still needs to be tested, but should work™
+
+To use the P2Pro camera on Linux without root privileges, you need to set up udev rules.
+
+1. Copy the provided udev rules file to your system:
+   ```bash
+   sudo cp 60-p2pro.rules /etc/udev/rules.d/
+   ```
+2. Reload the udev rules:
+   ```bash
+   sudo udevadm control --reload-rules
+   sudo udevadm trigger
+   ```
+3. Ensure your user is in the `video` group:
+   ```bash
+   sudo usermod -aG video $USER
+   ```
+   (You may need to log out and back in for this to take effect).
+
+The C++ viewer uses libusb for control commands and OpenCV (V4L2) for the video stream. By default, it will search for
+the camera on `/dev/video*` devices.
 
 ## Where to buy
 The cheapest vendor in Germany appears to be [Peargear](https://www.pergear.de/products/infiray-p2-pro?ref=067mg).  
