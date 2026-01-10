@@ -50,6 +50,15 @@ struct P2ProFrame {
     std::vector<uint16_t> thermal; // 256x192
 };
 
+struct HotSpotResult {
+    bool found = false;
+    int x = -1;
+    int y = -1;
+    uint16_t val = 0;
+    double tempC = 0.0;
+    uint8_t r = 255, g = 0, b = 0;
+};
+
 class P2Pro {
 public:
     P2Pro();

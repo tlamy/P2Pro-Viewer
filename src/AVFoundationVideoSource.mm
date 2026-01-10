@@ -65,7 +65,7 @@
     std::lock_guard<std::mutex> lock(frameMutex);
     if (!hasNewFrame) return false;
     frameData = latestFrame;
-    // hasNewFrame = NO; // Keep returning the latest frame until a new one arrives
+    hasNewFrame = NO; 
     return true;
 }
 
