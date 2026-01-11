@@ -2,8 +2,8 @@
 #define LINUX_ADAPTER_HPP
 
 #include "USBAdapter.hpp"
+#include "V4L2VideoSource.hpp"
 #include <libusb-1.0/libusb.h>
-#include <opencv2/opencv.hpp>
 
 class LinuxAdapter : public USBAdapter {
 public:
@@ -27,7 +27,7 @@ public:
 private:
     libusb_context *ctx = nullptr;
     libusb_device_handle *dev_handle = nullptr;
-    cv::VideoCapture cap;
+    V4L2VideoSource v4l2_cap;
 };
 
 #endif

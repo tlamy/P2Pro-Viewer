@@ -4,12 +4,12 @@
 #else
 #include "LinuxAdapter.hpp"
 #endif
+#include "ColorConversion.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <chrono>
 #include <thread>
 #include <cstring>
-#include <opencv2/opencv.hpp>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -116,12 +116,8 @@ bool P2Pro::get_frame(P2ProFrame &out_frame) {
     }
 
     // YUYV to RGB
-    cv::Mat yuyv(192, 256, CV_8UC2, pseudo_ptr);
-    cv::Mat rgb;
-    cv::cvtColor(yuyv, rgb, cv::COLOR_YUV2RGB_YUY2);
-
-    // Copy RGB data
-    out_frame.rgb.assign(rgb.data, rgb.data + (256 * 192 * 3));
+    out_frame.rgb.resize(256 * 192 * 3);
+    ColorConversion::YUY2toRGB(pseudo_ptr, out_frame.rgb.data(), 256, 192);
 
     // Extract thermal data
     uint16_t *thermal_raw = (uint16_t *) thermal_ptr;

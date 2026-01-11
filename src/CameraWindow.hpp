@@ -2,6 +2,7 @@
 #define CAMERA_WINDOW_HPP
 
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 #include <string>
 #include <vector>
 #include "P2Pro.hpp"
@@ -32,6 +33,7 @@ private:
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
     SDL_Texture* texture = nullptr;
+    TTF_Font* font = nullptr;
 
     bool isPointInCircle(int px, int py, int cx, int cy, int radius);
     void renderRecordButton(bool isRecording);

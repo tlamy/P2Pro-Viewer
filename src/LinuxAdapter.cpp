@@ -42,9 +42,7 @@ bool LinuxAdapter::connect(uint16_t vid, uint16_t pid) {
 }
 
 void LinuxAdapter::disconnect() {
-    if (cap.isOpened()) {
-        cap.release();
-    }
+    v4l2_cap.close();
     if (dev_handle) {
         libusb_close(dev_handle);
         dev_handle = nullptr;
@@ -68,33 +66,35 @@ bool LinuxAdapter::is_connected() const {
 }
 
 bool LinuxAdapter::open_video() {
-    if (cap.isOpened()) return true;
+    if (v4l2_cap.isOpened()) return true;
     dprintf("LinuxAdapter::open_video() - Searching for P2Pro Video Stream...\n");
 
     // On Linux, P2Pro usually shows up as /dev/videoX.
     // We can try multiple indices.
     for (int i: {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
-        dprintf("LinuxAdapter::open_video() - Probing index %d...\n", i);
-        try {
-            // Try V4L2 first as it's more direct on Linux
-            cap.open(i, cv::CAP_V4L2);
-            if (!cap.isOpened()) {
-                // Try any backend as fallback
-                cap.open(i, cv::CAP_ANY);
+        std::string device = "/dev/video" + std::to_string(i);
+        dprintf("LinuxAdapter::open_video() - Probing %s...\n", device.c_str());
+        
+        if (v4l2_cap.open(device, 256, 384)) {
+            // Check if we can get a frame (verification)
+            // We give it a bit more time and multiple attempts to get the first frame
+            bool got_frame = false;
+            for (int attempt = 0; attempt < 10; ++attempt) {
+                std::vector<uint8_t> dummy;
+                if (v4l2_cap.getFrame(dummy)) {
+                    if (dummy.size() >= 256 * 384 * 2) {
+                        got_frame = true;
+                        break;
+                    }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
 
-            if (cap.isOpened()) {
-                int w = (int) cap.get(cv::CAP_PROP_FRAME_WIDTH);
-                int h = (int) cap.get(cv::CAP_PROP_FRAME_HEIGHT);
-                dprintf("LinuxAdapter::open_video() - Index %d: %dx%d\n", i, w, h);
-                if (w == 256 && h == 384) {
-                    dprintf("LinuxAdapter::open_video() - OpenCV matched P2Pro on index %d (%dx%d)\n", i, w, h);
-                    cap.set(cv::CAP_PROP_CONVERT_RGB, 0);
-                    return true;
-                }
-                cap.release();
+            if (got_frame) {
+                dprintf("LinuxAdapter::open_video() - V4L2 matched P2Pro on %s\n", device.c_str());
+                return true;
             }
-        } catch (...) {
+            v4l2_cap.close();
         }
     }
 
@@ -102,13 +102,5 @@ bool LinuxAdapter::open_video() {
 }
 
 bool LinuxAdapter::read_frame(std::vector<uint8_t> &frame_data) {
-    if (!cap.isOpened()) return false;
-    cv::Mat frame;
-    if (!cap.read(frame)) return false;
-
-    if (frame.empty()) return false;
-
-    size_t size = frame.total() * frame.elemSize();
-    frame_data.assign(frame.data, frame.data + size);
-    return true;
+    return v4l2_cap.getFrame(frame_data);
 }

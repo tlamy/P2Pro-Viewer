@@ -1,9 +1,9 @@
 #ifndef VIDEO_RECORDER_HPP
 #define VIDEO_RECORDER_HPP
 
-#include <opencv2/opencv.hpp>
 #include <string>
 #include <vector>
+#include <cstdint>
 
 class VideoRecorder {
 public:
@@ -18,13 +18,17 @@ public:
     std::string getFilename() const { return filename; }
 
 private:
-    cv::VideoWriter writer;
     bool recording = false;
     std::string filename;
     int width = 0;
     int height = 0;
+    double fps = 0;
+    int64_t frame_count = 0;
+
+    void* impl = nullptr;
 
     std::string generateFilename() const;
+    void cleanup();
 };
 
 #endif
