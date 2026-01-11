@@ -77,11 +77,7 @@ bool MacOSAdapter::connect(uint16_t vid, uint16_t pid) {
 }
 
 void MacOSAdapter::disconnect() {
-    if (cap.isOpened()) {
-        cap.release();
-    }
     native_cap.close();
-    use_native_cap = false;
     if (device_interface) {
         if (is_usb_open) {
             (*device_interface)->USBDeviceClose(device_interface);
@@ -120,7 +116,7 @@ bool MacOSAdapter::is_connected() const {
 }
 
 bool MacOSAdapter::open_video() {
-    if (use_native_cap || cap.isOpened()) return true;
+    if (native_cap.isOpened()) return true;
     dprintf("MacOSAdapter::open_video() - Searching for P2Pro Video Stream...\n");
     
     // 1. Try Native AVFoundation first
@@ -139,7 +135,6 @@ bool MacOSAdapter::open_video() {
         dprintf("MacOSAdapter::open_video() - Found camera by name: %s. Attempting native open...\n", target_name.c_str());
         if (native_cap.openByName(target_name, 256, 384, 25)) {
             dprintf("MacOSAdapter::open_video() - Native AVFoundation matched P2Pro\n");
-            use_native_cap = true;
             return true;
         }
     }
@@ -153,46 +148,15 @@ bool MacOSAdapter::open_video() {
             std::vector<uint8_t> dummy;
             if (native_cap.getFrame(dummy)) {
                 dprintf("MacOSAdapter::open_video() - Native AVFoundation matched P2Pro on index %d\n", i);
-                use_native_cap = true;
                 return true;
             }
             native_cap.close();
         }
     }
 
-    // 3. Fallback to OpenCV index-based search (less robust, but native-ish)
-    for (int i : {1, 0, 2, 3}) {
-        dprintf("MacOSAdapter::open_video() - Probing OpenCV index %d...\n", i);
-        try {
-            cap.open(i, cv::CAP_AVFOUNDATION);
-            if (cap.isOpened()) {
-                int w = (int)cap.get(cv::CAP_PROP_FRAME_WIDTH);
-                int h = (int)cap.get(cv::CAP_PROP_FRAME_HEIGHT);
-                if (w == 256 && h == 384) {
-                    dprintf("MacOSAdapter::open_video() - OpenCV matched P2Pro on index %d (%dx%d)\n", i, w, h);
-                    cap.set(cv::CAP_PROP_CONVERT_RGB, 0);
-                    return true;
-                }
-                cap.release();
-            }
-        } catch (...) {}
-    }
-
     return false;
 }
 
 bool MacOSAdapter::read_frame(std::vector<uint8_t>& frame_data) {
-    if (use_native_cap) {
-        return native_cap.getFrame(frame_data);
-    }
-
-    if (!cap.isOpened()) return false;
-    cv::Mat frame;
-    if (!cap.read(frame)) return false;
-
-    if (frame.empty()) return false;
-
-    size_t size = frame.total() * frame.elemSize();
-    frame_data.assign(frame.data, frame.data + size);
-    return true;
+    return native_cap.getFrame(frame_data);
 }

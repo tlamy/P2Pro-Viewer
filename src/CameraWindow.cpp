@@ -2,12 +2,13 @@
 #include "P2Pro.hpp"
 #include <iostream>
 #include <cmath>
-#include <opencv2/opencv.hpp>
 
 CameraWindow::CameraWindow(const std::string& title, int width, int height)
     : title(title), baseWidth(width), baseHeight(height), currentWidth(width), currentHeight(height) {}
 
 CameraWindow::~CameraWindow() {
+    if (font) TTF_CloseFont(font);
+    TTF_Quit();
     if (texture) SDL_DestroyTexture(texture);
     if (renderer) SDL_DestroyRenderer(renderer);
     if (window) SDL_DestroyWindow(window);
@@ -19,6 +20,31 @@ bool CameraWindow::init() {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         dprintf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
         return false;
+    }
+
+    if (TTF_Init() == -1) {
+        dprintf("SDL_ttf could not initialize! TTF_Error: %s\n", TTF_GetError());
+        return false;
+    }
+
+    // Load font
+    const char* fontPaths[] = {
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "Arial.ttf" // Fallback to current directory
+    };
+
+    for (const char* path : fontPaths) {
+        font = TTF_OpenFont(path, 16);
+        if (font) {
+            dprintf("CameraWindow::init() - Loaded font: %s\n", path);
+            break;
+        }
+    }
+
+    if (!font) {
+        dprintf("CameraWindow::init() - Warning: Could not load any font. Text rendering will be disabled.\n");
     }
 
     dprintf("CameraWindow::init() - Creating window...\n");
@@ -189,16 +215,10 @@ void CameraWindow::renderIndicator() {
 }
 
 void CameraWindow::renderScanningMessage() {
+    if (!font) return;
     std::string msg = "Searching for P2Pro camera...";
-    
-    double fontScale = 0.5;
-    int baseLine;
-    cv::Size textSize = cv::getTextSize(msg, cv::FONT_HERSHEY_SIMPLEX, fontScale, 1, &baseLine);
-    
-    cv::Mat textMat = cv::Mat::zeros(textSize.height + baseLine + 4, textSize.width + 4, CV_8UC4);
-    cv::putText(textMat, msg, cv::Point(2, textSize.height + 2), cv::FONT_HERSHEY_SIMPLEX, fontScale, cv::Scalar(255, 255, 255, 255), 1, cv::LINE_AA);
-    
-    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom(textMat.data, textMat.cols, textMat.rows, 32, textMat.cols * 4, SDL_PIXELFORMAT_BGRA32);
+    SDL_Color white = {255, 255, 255, 255};
+    SDL_Surface* surface = TTF_RenderText_Blended(font, msg.c_str(), white);
     if (surface) {
         SDL_Texture* msgTexture = SDL_CreateTextureFromSurface(renderer, surface);
         if (msgTexture) {
@@ -231,17 +251,11 @@ void CameraWindow::renderHotSpot(const HotSpotResult& hotSpot) {
     SDL_RenderDrawLine(renderer, x - crossSize, y, x + crossSize, y);
     SDL_RenderDrawLine(renderer, x, y - crossSize, x, y + crossSize);
 
-    // Render Text using OpenCV to generate a temporary texture
+    // Render Text using SDL_ttf
+    if (!font) return;
     char text[32];
     snprintf(text, sizeof(text), "%.1f C", hotSpot.tempC);
 
-    double fontScale = 0.6; // Increased font scale
-    int baseLine;
-    cv::Size textSize = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, fontScale, 1, &baseLine);
-    
-    // Create a small Mat for the text
-    cv::Mat textMat = cv::Mat::zeros(textSize.height + baseLine + 4, textSize.width + 4, CV_8UC4);
-    
     // Contrast outline (hysteresis to prevent flickering)
     int brightness = hotSpot.r + hotSpot.g + hotSpot.b;
     if (darkOutline) {
@@ -249,24 +263,35 @@ void CameraWindow::renderHotSpot(const HotSpotResult& hotSpot) {
     } else {
         if (brightness > 450) darkOutline = true;
     }
-    cv::Scalar outlineColor = darkOutline ? cv::Scalar(0, 0, 0, 255) : cv::Scalar(255, 255, 255, 255);
     
-    cv::putText(textMat, text, cv::Point(2, textSize.height + 2) + cv::Point(1, 1), cv::FONT_HERSHEY_SIMPLEX, fontScale, outlineColor, 1, cv::LINE_AA);
-    // Inverse color text (Scalar is BGRA for this Mat/Surface combo)
-    cv::putText(textMat, text, cv::Point(2, textSize.height + 2), cv::FONT_HERSHEY_SIMPLEX, fontScale, cv::Scalar(invB, invG, invR, 255), 1, cv::LINE_AA);
+    SDL_Color outlineColor = darkOutline ? SDL_Color{0, 0, 0, 255} : SDL_Color{255, 255, 255, 255};
+    SDL_Color textColor = {invR, invG, invB, 255};
 
-    // Convert to SDL_Texture
-    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom(textMat.data, textMat.cols, textMat.rows, 32, textMat.cols * 4, SDL_PIXELFORMAT_BGRA32);
-    if (surface) {
-        SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, surface);
-        if (textTexture) {
-            SDL_Rect destRect = { x + 8, y - 8 - textSize.height, textMat.cols, textMat.rows };
-            if (destRect.x + destRect.w > currentWidth) destRect.x = x - 8 - destRect.w;
-            if (destRect.y < 0) destRect.y = y + 8;
-
-            SDL_RenderCopy(renderer, textTexture, NULL, &destRect);
-            SDL_DestroyTexture(textTexture);
+    // Render shadow/outline first
+    SDL_Surface* shadowSurface = TTF_RenderText_Blended(font, text, outlineColor);
+    if (shadowSurface) {
+        SDL_Texture* shadowTexture = SDL_CreateTextureFromSurface(renderer, shadowSurface);
+        if (shadowTexture) {
+            SDL_Rect destRect = { x + 8 + 1, y - 8 - shadowSurface->h + 1, shadowSurface->w, shadowSurface->h };
+            if (destRect.x + destRect.w > currentWidth) destRect.x = x - 8 - destRect.w + 1;
+            if (destRect.y < 0) destRect.y = y + 8 + 1;
+            SDL_RenderCopy(renderer, shadowTexture, NULL, &destRect);
+            SDL_DestroyTexture(shadowTexture);
         }
-        SDL_FreeSurface(surface);
+
+        // Render main text
+        SDL_Surface* textSurface = TTF_RenderText_Blended(font, text, textColor);
+        if (textSurface) {
+            SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+            if (textTexture) {
+                SDL_Rect destRect = { x + 8, y - 8 - textSurface->h, textSurface->w, textSurface->h };
+                if (destRect.x + destRect.w > currentWidth) destRect.x = x - 8 - destRect.w;
+                if (destRect.y < 0) destRect.y = y + 8;
+                SDL_RenderCopy(renderer, textTexture, NULL, &destRect);
+                SDL_DestroyTexture(textTexture);
+            }
+            SDL_FreeSurface(textSurface);
+        }
+        SDL_FreeSurface(shadowSurface);
     }
 }

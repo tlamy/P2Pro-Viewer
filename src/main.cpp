@@ -4,7 +4,6 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include <opencv2/opencv.hpp>
 #include <vector>
 #include <deque>
 #include <cmath>
@@ -131,45 +130,28 @@ HotSpotResult detectHotSpot(const P2ProFrame& frame, bool previouslyFound) {
 void annotateFrame(P2ProFrame& frame, const HotSpotResult& res) {
     if (!res.found) return;
 
-    cv::Mat rgbMat(192, 256, CV_8UC3, frame.rgb.data());
-    cv::Point pt(res.x, res.y);
-    
-    // Inverse color for marker and text
-    cv::Scalar color(255 - res.r, 255 - res.g, 255 - res.b); 
+    int width = 256;
+    int height = 192;
+    uint8_t r = 255 - res.r;
+    uint8_t g = 255 - res.g;
+    uint8_t b = 255 - res.b;
 
-    cv::drawMarker(rgbMat, pt, color, cv::MARKER_CROSS, 10, 1);
-
-    char text[32];
-    snprintf(text, sizeof(text), "%.1f C", res.tempC);
-
-    double fontScale = 0.7; // Increased font scale
-    int thickness = 1;
-    int baseLine;
-    cv::Size textSize = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, fontScale, thickness, &baseLine);
-
-    cv::Point textPos = pt + cv::Point(5, -5);
-    if (textPos.x + textSize.width > 256) textPos.x = pt.x - textSize.width - 5;
-    if (textPos.y - textSize.height < 0) textPos.y = pt.y + textSize.height + 5;
-
-    // Use a background contrast color (opposite of the inverse) for the outline if needed, 
-    // but the request just said "use the inverse color of the hot spot".
-    // Keeping the black outline for guaranteed readability might be a good idea, 
-    // but let's see if the inverse color is enough.
-    // The previous code had a black outline:
-    // cv::putText(rgbMat, text, textPos + cv::Point(1, 1), cv::FONT_HERSHEY_SIMPLEX, fontScale, cv::Scalar(0, 0, 0), thickness, cv::LINE_AA);
-    
-    // Use hysteresis for outline color to prevent flickering
-    static bool darkOutline = true;
-    int brightness = res.r + res.g + res.b;
-    if (darkOutline) {
-        if (brightness < 300) darkOutline = false;
-    } else {
-        if (brightness > 450) darkOutline = true;
+    // Simple crosshair drawing
+    int crossSize = 10;
+    for (int i = -crossSize; i <= crossSize; ++i) {
+        if (res.x + i >= 0 && res.x + i < width) {
+            int idx = (res.y * width + (res.x + i)) * 3;
+            frame.rgb[idx] = r;
+            frame.rgb[idx + 1] = g;
+            frame.rgb[idx + 2] = b;
+        }
+        if (res.y + i >= 0 && res.y + i < height) {
+            int idx = ((res.y + i) * width + res.x) * 3;
+            frame.rgb[idx] = r;
+            frame.rgb[idx + 1] = g;
+            frame.rgb[idx + 2] = b;
+        }
     }
-    cv::Scalar outlineColor = darkOutline ? cv::Scalar(0, 0, 0) : cv::Scalar(255, 255, 255);
-
-    cv::putText(rgbMat, text, textPos + cv::Point(1, 1), cv::FONT_HERSHEY_SIMPLEX, fontScale, outlineColor, thickness, cv::LINE_AA);
-    cv::putText(rgbMat, text, textPos, cv::FONT_HERSHEY_SIMPLEX, fontScale, color, thickness, cv::LINE_AA);
 }
 
 int main(int argc, char* argv[]) {

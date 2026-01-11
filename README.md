@@ -15,11 +15,11 @@ The communication protocol was reverse-engineered, to avoid needing to include t
 # Compiling
 ## MacOS
 ```
-brew install sdl2 libusb opencv
+brew install sdl2 libusb ffmpeg
 ```
 ## Linux (Debian/Ubuntu)
 ```
-sudo apt install libsdl2-dev libusb-1.0-0-dev libopencv-dev
+sudo apt install libsdl2-dev libusb-1.0-0-dev libavcodec-dev libavformat-dev libswscale-dev libavutil-dev
 ```
 
 ## Notices
@@ -51,8 +51,8 @@ To use the P2Pro camera on Linux without root privileges, you need to set up ude
    ```
    (You may need to log out and back in for this to take effect).
 
-The C++ viewer uses libusb for control commands and OpenCV (V4L2) for the video stream. By default, it will search for
-the camera on `/dev/video*` devices.
+The C++ viewer uses libusb for control commands and native APIs (AVFoundation/V4L2) for the video stream. Video recording is handled by FFmpeg. By default, it will search for
+the camera on `/dev/video*` devices (Linux) or via AVFoundation (macOS).
 
 ## Where to buy
 The cheapest vendor in Germany appears to be [Peargear](https://www.pergear.de/products/infiray-p2-pro?ref=067mg).  

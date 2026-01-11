@@ -5,7 +5,6 @@
 #include "AVFoundationVideoSource.hpp"
 #include <IOKit/usb/IOUSBLib.h>
 #include <CoreFoundation/CoreFoundation.h>
-#include <opencv2/opencv.hpp>
 
 class MacOSAdapter : public USBAdapter {
 public:
@@ -26,9 +25,7 @@ public:
 private:
     IOUSBDeviceInterface **device_interface = nullptr;
     bool is_usb_open = false;
-    cv::VideoCapture cap;
     AVFoundationVideoSource native_cap;
-    bool use_native_cap = false;
 };
 
 #endif
