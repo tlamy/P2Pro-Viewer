@@ -77,9 +77,20 @@ bool LinuxAdapter::open_video() {
         
         if (v4l2_cap.open(device, 256, 384)) {
             // Check if we can get a frame (verification)
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-            std::vector<uint8_t> dummy;
-            if (v4l2_cap.getFrame(dummy)) {
+            // We give it a bit more time and multiple attempts to get the first frame
+            bool got_frame = false;
+            for (int attempt = 0; attempt < 10; ++attempt) {
+                std::vector<uint8_t> dummy;
+                if (v4l2_cap.getFrame(dummy)) {
+                    if (dummy.size() >= 256 * 384 * 2) {
+                        got_frame = true;
+                        break;
+                    }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+
+            if (got_frame) {
                 dprintf("LinuxAdapter::open_video() - V4L2 matched P2Pro on %s\n", device.c_str());
                 return true;
             }

@@ -8,13 +8,17 @@
 #include <iostream>
 #include "P2Pro.hpp" // For dprintf
 
-V4L2VideoSource::V4L2VideoSource() {}
+#include <poll.h>
+#include <errno.h>
+
+V4L2VideoSource::V4L2VideoSource() {
+}
 
 V4L2VideoSource::~V4L2VideoSource() {
     close();
 }
 
-bool V4L2VideoSource::open(const std::string& device, int w, int h) {
+bool V4L2VideoSource::open(const std::string &device, int w, int h) {
     close();
 
     fd = ::open(device.c_str(), O_RDWR | O_NONBLOCK, 0);
@@ -106,7 +110,7 @@ void V4L2VideoSource::close() {
         v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         ioctl(fd, VIDIOC_STREAMOFF, &type);
 
-        for (auto& b : buffers) {
+        for (auto &b: buffers) {
             munmap(b.start, b.length);
         }
         buffers.clear();
@@ -116,8 +120,19 @@ void V4L2VideoSource::close() {
     }
 }
 
-bool V4L2VideoSource::getFrame(std::vector<uint8_t>& frameData) {
+bool V4L2VideoSource::getFrame(std::vector<uint8_t> &frameData) {
     if (fd == -1) return false;
+
+    // Use poll to wait for data if it's not immediately available
+    struct pollfd pfd;
+    pfd.fd = fd;
+    pfd.events = POLLIN;
+
+    // We wait up to 100ms for a frame
+    int ret = poll(&pfd, 1, 100);
+    if (ret <= 0) {
+        return false;
+    }
 
     v4l2_buffer buf;
     std::memset(&buf, 0, sizeof(buf));
@@ -128,7 +143,12 @@ bool V4L2VideoSource::getFrame(std::vector<uint8_t>& frameData) {
         return false;
     }
 
-    frameData.assign((uint8_t*)buffers[buf.index].start, (uint8_t*)buffers[buf.index].start + buf.bytesused);
+    if (buf.index >= buffers.size()) {
+        ioctl(fd, VIDIOC_QBUF, &buf);
+        return false;
+    }
+
+    frameData.assign((uint8_t *) buffers[buf.index].start, (uint8_t *) buffers[buf.index].start + buf.bytesused);
 
     if (ioctl(fd, VIDIOC_QBUF, &buf) < 0) {
         return false;
