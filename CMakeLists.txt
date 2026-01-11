@@ -56,7 +56,45 @@ else ()
 endif ()
 
 if (APPLE)
-    target_link_libraries(P2ProViewer ${SDL2_LIBRARIES} ${SDL2_TTF_LIBRARIES})
+    # Prefer static linking for SDL2 and SDL2_ttf on macOS to make it more portable
+    # We force the search for static libraries for these specific components
+    set(ORIG_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
+    set(CMAKE_FIND_LIBRARY_SUFFIXES .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
+
+    # Use pkg-config to find static versions and their dependencies if possible
+    pkg_check_modules(SDL2_STATIC_PKG QUIET SDL2 STATIC IMPORTED_TARGET)
+    pkg_check_modules(SDL2_TTF_STATIC_PKG QUIET SDL2_ttf STATIC IMPORTED_TARGET)
+
+    if(TARGET PkgConfig::SDL2_TTF_STATIC_PKG)
+        target_link_libraries(P2ProViewer PkgConfig::SDL2_TTF_STATIC_PKG)
+    elseif(TARGET SDL2_ttf::SDL2_ttf-static)
+        target_link_libraries(P2ProViewer SDL2_ttf::SDL2_ttf-static)
+    else()
+        find_library(SDL2_TTF_STATIC NAMES libSDL2_ttf.a)
+        if(SDL2_TTF_STATIC)
+            target_link_libraries(P2ProViewer ${SDL2_TTF_STATIC})
+        else()
+            target_link_libraries(P2ProViewer ${SDL2_TTF_LIBRARIES})
+        endif()
+    endif()
+
+    if(NOT TARGET PkgConfig::SDL2_TTF_STATIC_PKG)
+        if(TARGET PkgConfig::SDL2_STATIC_PKG)
+            target_link_libraries(P2ProViewer PkgConfig::SDL2_STATIC_PKG)
+        elseif(TARGET SDL2::SDL2-static)
+            target_link_libraries(P2ProViewer SDL2::SDL2-static)
+        else()
+            find_library(SDL2_STATIC NAMES libSDL2.a)
+            if(SDL2_STATIC)
+                target_link_libraries(P2ProViewer ${SDL2_STATIC})
+            else()
+                target_link_libraries(P2ProViewer ${SDL2_LIBRARIES})
+            endif()
+        endif()
+    endif()
+    
+    # Restore original suffixes
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ${ORIG_CMAKE_FIND_LIBRARY_SUFFIXES})
 else()
     target_link_libraries(P2ProViewer ${SDL2_LIBRARIES} ${SDL2_TTF_LIBRARIES} ${LIBUSB_LIBRARIES} ${FFMPEG_LIBRARIES})
 endif()
