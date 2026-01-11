@@ -11,7 +11,9 @@ find_package(PkgConfig REQUIRED)
 if(PKG_CONFIG_FOUND)
     pkg_check_modules(LIBUSB libusb-1.0)
     pkg_check_modules(SDL2_TTF SDL2_ttf)
-    pkg_check_modules(FFMPEG REQUIRED libavcodec libavformat libswscale libavutil)
+    if(NOT APPLE)
+        pkg_check_modules(FFMPEG REQUIRED libavcodec libavformat libswscale libavutil)
+    endif()
 endif()
 
 if(NOT LIBUSB_FOUND)
@@ -22,8 +24,13 @@ else()
     set(LIBUSB_INCLUDE_DIR ${LIBUSB_INCLUDE_DIRS})
 endif()
 
-include_directories(${SDL2_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${LIBUSB_INCLUDE_DIR} ${FFMPEG_INCLUDE_DIRS})
-link_directories(${LIBUSB_LIBRARY_DIRS} ${SDL2_TTF_LIBRARY_DIRS} ${FFMPEG_LIBRARY_DIRS})
+if (NOT APPLE)
+    include_directories(${FFMPEG_INCLUDE_DIRS})
+    link_directories(${FFMPEG_LIBRARY_DIRS})
+endif()
+
+include_directories(${SDL2_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${LIBUSB_INCLUDE_DIR})
+link_directories(${LIBUSB_LIBRARY_DIRS} ${SDL2_TTF_LIBRARY_DIRS})
 
 if (APPLE)
     add_executable(P2ProViewer
@@ -32,7 +39,7 @@ if (APPLE)
             src/CameraWindow.cpp
             src/MacOSAdapter.cpp
             src/AVFoundationVideoSource.mm
-            src/VideoRecorder.cpp
+            src/VideoRecorder_mac.mm
             src/ColorConversion.cpp
     )
 else ()
@@ -40,14 +47,18 @@ else ()
             src/main.cpp
             src/P2Pro.cpp
             src/CameraWindow.cpp
-            src/VideoRecorder.cpp
+            src/VideoRecorder_ffmpeg.cpp
             src/LinuxAdapter.cpp
             src/V4L2VideoSource.cpp
             src/ColorConversion.cpp
     )
 endif ()
 
-target_link_libraries(P2ProViewer ${SDL2_LIBRARIES} ${SDL2_TTF_LIBRARIES} ${LIBUSB_LIBRARIES} ${FFMPEG_LIBRARIES})
+if (APPLE)
+    target_link_libraries(P2ProViewer ${SDL2_LIBRARIES} ${SDL2_TTF_LIBRARIES} ${LIBUSB_LIBRARIES})
+else()
+    target_link_libraries(P2ProViewer ${SDL2_LIBRARIES} ${SDL2_TTF_LIBRARIES} ${LIBUSB_LIBRARIES} ${FFMPEG_LIBRARIES})
+endif()
 
 if(APPLE)
     find_library(IOKIT_FRAMEWORK IOKit)
@@ -64,5 +75,5 @@ if(APPLE)
         ${COREMEDIA_FRAMEWORK}
         ${COREVIDEO_FRAMEWORK}
     )
-    set_source_files_properties(src/AVFoundationVideoSource.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+    set_source_files_properties(src/AVFoundationVideoSource.mm src/VideoRecorder_mac.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 endif()

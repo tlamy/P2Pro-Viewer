@@ -5,13 +5,6 @@
 #include <vector>
 #include <cstdint>
 
-// Forward declarations for FFmpeg structures
-struct AVFormatContext;
-struct AVStream;
-struct AVCodecContext;
-struct AVFrame;
-struct SwsContext;
-
 class VideoRecorder {
 public:
     VideoRecorder();
@@ -32,11 +25,7 @@ private:
     double fps = 0;
     int64_t frame_count = 0;
 
-    AVFormatContext* fmt_ctx = nullptr;
-    AVStream* stream = nullptr;
-    AVCodecContext* codec_ctx = nullptr;
-    AVFrame* frame = nullptr;
-    SwsContext* sws_ctx = nullptr;
+    void* impl = nullptr;
 
     std::string generateFilename() const;
     void cleanup();
