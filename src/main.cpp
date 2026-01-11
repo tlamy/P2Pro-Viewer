@@ -15,7 +15,7 @@ public:
         uint8_t r, g, b;
     };
 
-    void update(HotSpotResult& res, const P2ProFrame& frame) {
+    void update(HotSpotResult &res, const P2ProFrame &frame) {
         if (!res.found) {
             lostFrames++;
             // Persistence: if we recently had a hot spot, keep it for up to 3 frames
@@ -30,18 +30,19 @@ public:
         }
 
         lostFrames = 0;
-        Sample current = {(double)res.x, (double)res.y, res.tempC, res.r, res.g, res.b};
+        Sample current = {(double) res.x, (double) res.y, res.tempC, res.r, res.g, res.b};
 
         if (!history.empty()) {
             double lastX = history.back().x;
             double lastY = history.back().y;
             double distSq = std::pow(current.x - lastX, 2) + std::pow(current.y - lastY, 2);
-            
-            if (distSq > 20.0 * 20.0) { // Threshold for "moving significantly"
+
+            if (distSq > 20.0 * 20.0) {
+                // Threshold for "moving significantly"
                 history.clear();
             }
         }
-        
+
         history.push_back(current);
         if (history.size() > 8) {
             history.pop_front();
@@ -54,14 +55,14 @@ private:
     std::deque<Sample> history;
     int lostFrames = 0;
 
-    void applyHistory(HotSpotResult& res) {
+    void applyHistory(HotSpotResult &res) {
         if (history.empty()) return;
 
         double avgX = 0, avgY = 0;
         double maxTemp = -1000.0;
         Sample bestSample = history.back();
 
-        for (const auto& s : history) {
+        for (const auto &s: history) {
             avgX += s.x;
             avgY += s.y;
             if (s.temp > maxTemp) {
@@ -69,12 +70,12 @@ private:
                 bestSample = s; // Use color and temp from the hottest sample
             }
         }
-        
-        res.x = (int)std::round(avgX / history.size());
-        res.y = (int)std::round(avgY / history.size());
+
+        res.x = (int) std::round(avgX / history.size());
+        res.y = (int) std::round(avgY / history.size());
         // Use max temperature from buffer as requested: "if any modification is done to temperature, it must use max, not average"
         res.tempC = maxTemp;
-        
+
         // Use color from the hottest sample for better contrast consistency
         res.r = bestSample.r;
         res.g = bestSample.g;
@@ -82,7 +83,7 @@ private:
     }
 };
 
-HotSpotResult detectHotSpot(const P2ProFrame& frame, bool previouslyFound) {
+HotSpotResult detectHotSpot(const P2ProFrame &frame, bool previouslyFound) {
     if (frame.thermal.empty()) return {};
 
     int width = 256;
@@ -110,16 +111,16 @@ HotSpotResult detectHotSpot(const P2ProFrame& frame, bool previouslyFound) {
     double avgVal = totalSum / (width * height);
     double threshold = previouslyFound ? 96.0 : 128.0; // Hysteresis: 1.5C vs 2.0C
 
-    if ((double)maxVal - avgVal > threshold) {
+    if ((double) maxVal - avgVal > threshold) {
         res.val = maxVal;
         res.tempC = (maxVal / 64.0) - 273.15;
-        
+
         // Extract color from RGB frame
-        if (frame.rgb.size() >= (size_t)(res.y * width + res.x) * 3 + 3) {
+        if (frame.rgb.size() >= (size_t) (res.y * width + res.x) * 3 + 3) {
             int idx = (res.y * width + res.x) * 3;
             res.r = frame.rgb[idx];
-            res.g = frame.rgb[idx+1];
-            res.b = frame.rgb[idx+2];
+            res.g = frame.rgb[idx + 1];
+            res.b = frame.rgb[idx + 2];
         }
     } else {
         res.found = false;
@@ -127,7 +128,7 @@ HotSpotResult detectHotSpot(const P2ProFrame& frame, bool previouslyFound) {
     return res;
 }
 
-void annotateFrame(P2ProFrame& frame, const HotSpotResult& res) {
+void annotateFrame(P2ProFrame &frame, const HotSpotResult &res) {
     if (!res.found) return;
 
     int width = 256;
@@ -154,7 +155,7 @@ void annotateFrame(P2ProFrame& frame, const HotSpotResult& res) {
     }
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     try {
         dprintf("Application Start\n");
         CameraWindow window("P2Pro Viewer", 256, 192); // Display only the pseudo color part initially
@@ -167,17 +168,17 @@ int main(int argc, char* argv[]) {
         dprintf("Initializing P2Pro camera object...\n");
         P2Pro camera;
         dprintf("Connecting to P2Pro camera (USB and Video)...\n");
-        
+
         bool cameraConnected = camera.connect();
         if (!cameraConnected) {
             dprintf("Could not find or connect to P2Pro camera. Entering scanning mode...\n");
         } else {
             dprintf("Connected to P2Pro camera!\n");
-            
+
             auto pn = camera.get_device_info(DeviceInfoType::DEV_INFO_GET_PN);
             dprintf("Part Number: ");
-            for (auto b : pn) {
-                if (b >= 32 && b <= 126) dprintf("%c", (char)b);
+            for (auto b: pn) {
+                if (b >= 32 && b <= 126) dprintf("%c", (char) b);
                 else dprintf("[%02X]", b);
             }
             dprintf("\n");
@@ -197,7 +198,7 @@ int main(int argc, char* argv[]) {
 
         while (running) {
             window.pollEvents(running, recordToggleRequested);
-            
+
             if (!cameraConnected) {
                 auto now = std::chrono::steady_clock::now();
                 if (std::chrono::duration_cast<std::chrono::seconds>(now - lastConnectAttempt).count() >= 1) {
@@ -224,10 +225,10 @@ int main(int argc, char* argv[]) {
                 if (camera.get_frame(frame)) {
                     hs = detectHotSpot(frame, hs.found);
                     tracker.update(hs, frame);
-                    
+
                     // Update window with clean frame (overlay rendered separately)
-                    window.updateFrame(frame.rgb, 256, 192);
-                    
+                    window.updateFrame(frame.rgb, frame.thermal, 256, 192);
+
                     if (recorder.isRecording()) {
                         P2ProFrame annotated = frame;
                         annotateFrame(annotated, hs);
@@ -263,8 +264,7 @@ int main(int argc, char* argv[]) {
         if (recorder.isRecording()) {
             recorder.stop();
         }
-
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         dprintf("Error: %s\n", e.what());
         return -1;
     }

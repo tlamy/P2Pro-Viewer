@@ -42,6 +42,7 @@ if (APPLE)
             src/AVFoundationVideoSource.mm
             src/VideoRecorder_mac.mm
             src/ColorConversion.cpp
+            src/Scaler.cpp
     )
 else ()
     add_executable(P2ProViewer
@@ -52,6 +53,7 @@ else ()
             src/LinuxAdapter.cpp
             src/V4L2VideoSource.cpp
             src/ColorConversion.cpp
+            src/Scaler.cpp
     )
 endif ()
 
