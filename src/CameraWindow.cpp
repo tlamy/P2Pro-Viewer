@@ -65,17 +65,11 @@ bool CameraWindow::init() {
         return false;
     }
 
-    // Detect HiDPI scale
-    int ww, wh, rw, rh;
-    SDL_GetWindowSize(window, &ww, &wh);
-    SDL_GetRendererOutputSize(renderer, &rw, &rh);
-    dpiScale = (float)rw / (float) ww;
-
     // Set initial window size to 2x base resolution as requested
     dprintf("CameraWindow::init() - Setting initial window size to 2x base resolution.\n");
     currentWidth = baseWidth * 2;
     currentHeight = baseHeight * 2;
-    SDL_SetWindowSize(window, currentWidth, currentHeight + (int) (toolbarHeight * dpiScale));
+    SDL_SetWindowSize(window, currentWidth, currentHeight + toolbarHeight);
 
     SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
     SDL_ShowWindow(window);
@@ -131,7 +125,7 @@ void CameraWindow::setRotation(int degrees) {
     currentWidth = (int) std::round(baseWidth * targetScale);
     currentHeight = (int) std::round(baseHeight * targetScale);
 
-    SDL_SetWindowSize(window, currentWidth, currentHeight + (int) (toolbarHeight * dpiScale));
+    SDL_SetWindowSize(window, currentWidth, currentHeight + toolbarHeight);
     SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
     SDL_SetWindowMinimumSize(window, baseWidth, baseHeight + toolbarHeight);
 }
@@ -177,7 +171,7 @@ void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested) {
                 scaler.getScaledSize(newW, newH, targetW, targetH);
 
                 if (newW != targetW || (e.window.data2 != targetH + toolbarHeight)) {
-                    SDL_SetWindowSize(window, targetW, targetH + (int) (toolbarHeight * dpiScale));
+                    SDL_SetWindowSize(window, targetW, targetH + toolbarHeight);
                 }
                 currentWidth = targetW;
                 currentHeight = targetH;

@@ -32,7 +32,6 @@ private:
     int currentHeight;
     int toolbarHeight = 40;
     int rotation = 0; // 0, 90, 180, 270 degrees anti-clockwise
-    float dpiScale = 1.0f;
     int mouseX = 0;
     int mouseY = 0;
     bool mouseOverButton = false;
