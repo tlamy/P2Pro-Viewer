@@ -15,7 +15,7 @@ The communication protocol was reverse-engineered, to avoid needing to include t
 # Compiling
 ## MacOS
 ```
-brew install sdl2 libusb
+brew install sdl2 sdl2_ttf
 ```
 ## Linux (Debian/Ubuntu)
 ```
@@ -51,7 +51,7 @@ To use the P2Pro camera on Linux without root privileges, you need to set up ude
    ```
    (You may need to log out and back in for this to take effect).
 
-The C++ viewer uses libusb for control commands and native APIs (AVFoundation/V4L2) for the video stream. Video recording is handled by native APIs (AVAssetWriter) on macOS and FFmpeg on Linux. By default, it will search for
+The C++ viewer uses native APIs (IOKit on macOS, libusb on Linux) for control commands and (AVFoundation/V4L2) for the video stream. Video recording is handled by native APIs (AVAssetWriter) on macOS and FFmpeg on Linux. By default, it will search for
 the camera on `/dev/video*` devices (Linux) or via AVFoundation (macOS).
 
 ## Where to buy
