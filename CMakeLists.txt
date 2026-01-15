@@ -100,7 +100,7 @@ if (APPLE)
             endif()
         endif()
     endif()
-    
+
     # Link against required frameworks for SDL2 static
     find_library(METAL_FRAMEWORK Metal)
     find_library(QUARTZCORE_FRAMEWORK QuartzCore)
@@ -110,7 +110,7 @@ if (APPLE)
     find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
     find_library(FORCEFEEDBACK_FRAMEWORK ForceFeedback)
     find_library(GAMECONTROLLER_FRAMEWORK GameController)
-    target_link_libraries(P2ProViewer 
+    target_link_libraries(P2ProViewer
         ${METAL_FRAMEWORK}
         ${QUARTZCORE_FRAMEWORK}
         ${COCOA_FRAMEWORK}
@@ -120,7 +120,27 @@ if (APPLE)
         ${FORCEFEEDBACK_FRAMEWORK}
         ${GAMECONTROLLER_FRAMEWORK}
     )
-    
+
+    # Link against required frameworks for SDL2 static
+    find_library(METAL_FRAMEWORK Metal)
+    find_library(QUARTZCORE_FRAMEWORK QuartzCore)
+    find_library(COCOA_FRAMEWORK Cocoa)
+    find_library(CARBON_FRAMEWORK Carbon)
+    find_library(COREAUDIO_FRAMEWORK CoreAudio)
+    find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
+    find_library(FORCEFEEDBACK_FRAMEWORK ForceFeedback)
+    find_library(GAMECONTROLLER_FRAMEWORK GameController)
+    target_link_libraries(P2ProViewer
+        ${METAL_FRAMEWORK}
+        ${QUARTZCORE_FRAMEWORK}
+        ${COCOA_FRAMEWORK}
+        ${CARBON_FRAMEWORK}
+        ${COREAUDIO_FRAMEWORK}
+        ${AUDIOUNIT_FRAMEWORK}
+        ${FORCEFEEDBACK_FRAMEWORK}
+        ${GAMECONTROLLER_FRAMEWORK}
+    )
+
     # Restore original suffixes
     set(CMAKE_FIND_LIBRARY_SUFFIXES ${ORIG_CMAKE_FIND_LIBRARY_SUFFIXES})
 else()

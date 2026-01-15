@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-linux:
+    name: Build Linux (.deb)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            build-essential \
+            libsdl2-dev \
+            libsdl2-ttf-dev \
+            libusb-1.0-0-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libswscale-dev \
+            libavutil-dev
+
+      - name: Configure and Build
+        run: |
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+
+      - name: Package with CPack
+        run: |
+          cd build
+          cpack -G DEB
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-deb
+          path: build/*.deb
+
+  build-macos:
+    name: Build macOS (.dmg)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          brew install sdl2 sdl2_ttf dylibbundler create-dmg
+
+      - name: Configure and Build
+        run: |
+          mkdir build
+          cd build
+          # We prefer static SDL2 and SDL2_ttf if possible, as per CMakeLists.txt
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Create App Bundle
+        run: |
+          # Use the project's bundle script
+          # The script expects BUILD_DIR="cmake-build-debug" and TARGET="P2ProViewer"
+          # Let's adjust it slightly or link build to cmake-build-debug
+          ln -s build cmake-build-debug
+          chmod +x bundle_macos.sh
+          ./bundle_macos.sh
+
+      - name: Create DMG
+        run: |
+          mkdir -p dist
+          create-dmg \
+            --volname "P2ProViewer" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "P2ProViewer.app" 200 190 \
+            --hide-extension "P2ProViewer.app" \
+            --app-drop-link 600 185 \
+            "dist/P2ProViewer.dmg" \
+            "P2ProViewer.app"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-dmg
+          path: dist/*.dmg
+
+  release:
+    name: Release
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Download Linux Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: linux-deb
+          path: dist
+
+      - name: Download macOS Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: macos-dmg
+          path: dist
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 'lts/*'
+
+      - name: Install semantic-release dependencies
+        run: npm install
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
