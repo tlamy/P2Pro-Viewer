@@ -6,15 +6,33 @@
 TARGET="${TARGET:-P2ProViewer}"
 BUILD_DIR="${BUILD_DIR:-cmake-build-debug}"
 
-if [ ! -f "$BUILD_DIR/$TARGET" ]; then
-    echo "Executable $BUILD_DIR/$TARGET not found. Please build the project first."
+if [ -d "$BUILD_DIR/$TARGET.app" ]; then
+    echo "Using existing app bundle from build directory..."
+    # If it's a bundle, the executable we want to fix is inside it
+    # But wait, the script currently creates its OWN bundle structure.
+    # If CMake already created one, we should probably just use it or 
+    # fix the one it created.
+    
+    # Let's stick to the current script's logic of creating a NEW bundle structure
+    # in the current directory, but make sure we find the executable.
+    SOURCE_EXE="$BUILD_DIR/$TARGET.app/Contents/MacOS/$TARGET"
+    if [ ! -f "$SOURCE_EXE" ]; then
+        # Fallback to just the executable if it's not in the bundle
+        SOURCE_EXE="$BUILD_DIR/$TARGET"
+    fi
+else
+    SOURCE_EXE="$BUILD_DIR/$TARGET"
+fi
+
+if [ ! -f "$SOURCE_EXE" ]; then
+    echo "Executable $SOURCE_EXE not found. Please build the project first."
     exit 1
 fi
 
 echo "Creating bundle structure..."
 mkdir -p "$TARGET.app/Contents/MacOS"
 mkdir -p "$TARGET.app/Contents/Resources"
-cp "$BUILD_DIR/$TARGET" "$TARGET.app/Contents/MacOS/"
+cp "$SOURCE_EXE" "$TARGET.app/Contents/MacOS/$TARGET"
 
 # Copy icon if it exists
 if [ -f "Resources/P2ProViewer.icns" ]; then
