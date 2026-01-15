@@ -43,7 +43,13 @@ if (APPLE)
             src/VideoRecorder_mac.mm
             src/ColorConversion.cpp
             src/Scaler.cpp
+            Resources/P2ProViewer.icns
     )
+    set_target_properties(P2ProViewer PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_ICON_FILE P2ProViewer.icns
+    )
+    set_source_files_properties(Resources/P2ProViewer.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 else ()
     add_executable(P2ProViewer
             src/main.cpp
@@ -104,7 +110,7 @@ if (APPLE)
     find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
     find_library(FORCEFEEDBACK_FRAMEWORK ForceFeedback)
     find_library(GAMECONTROLLER_FRAMEWORK GameController)
-    target_link_libraries(P2ProViewer 
+    target_link_libraries(P2ProViewer
         ${METAL_FRAMEWORK}
         ${QUARTZCORE_FRAMEWORK}
         ${COCOA_FRAMEWORK}
@@ -114,7 +120,27 @@ if (APPLE)
         ${FORCEFEEDBACK_FRAMEWORK}
         ${GAMECONTROLLER_FRAMEWORK}
     )
-    
+
+    # Link against required frameworks for SDL2 static
+    find_library(METAL_FRAMEWORK Metal)
+    find_library(QUARTZCORE_FRAMEWORK QuartzCore)
+    find_library(COCOA_FRAMEWORK Cocoa)
+    find_library(CARBON_FRAMEWORK Carbon)
+    find_library(COREAUDIO_FRAMEWORK CoreAudio)
+    find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
+    find_library(FORCEFEEDBACK_FRAMEWORK ForceFeedback)
+    find_library(GAMECONTROLLER_FRAMEWORK GameController)
+    target_link_libraries(P2ProViewer
+        ${METAL_FRAMEWORK}
+        ${QUARTZCORE_FRAMEWORK}
+        ${COCOA_FRAMEWORK}
+        ${CARBON_FRAMEWORK}
+        ${COREAUDIO_FRAMEWORK}
+        ${AUDIOUNIT_FRAMEWORK}
+        ${FORCEFEEDBACK_FRAMEWORK}
+        ${GAMECONTROLLER_FRAMEWORK}
+    )
+
     # Restore original suffixes
     set(CMAKE_FIND_LIBRARY_SUFFIXES ${ORIG_CMAKE_FIND_LIBRARY_SUFFIXES})
 else()
@@ -151,6 +177,7 @@ set(CPACK_GENERATOR "DEB")
 install(TARGETS P2ProViewer DESTINATION bin)
 if(NOT APPLE)
     install(FILES 60-p2pro.rules DESTINATION lib/udev/rules.d)
+    install(FILES Resources/icon.png DESTINATION share/pixmaps RENAME p2proviewer.png)
 endif()
 
 include(CPack)
