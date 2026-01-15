@@ -1,5 +1,6 @@
 #include "CameraWindow.hpp"
 #include "P2Pro.hpp"
+#include "Icons.hpp"
 #include <iostream>
 #include <cmath>
 
@@ -9,6 +10,7 @@ CameraWindow::CameraWindow(const std::string& title, int width, int height)
 }
 
 CameraWindow::~CameraWindow() {
+    cleanupIcons();
     if (font) TTF_CloseFont(font);
     TTF_Quit();
     if (texture) SDL_DestroyTexture(texture);
@@ -31,7 +33,7 @@ bool CameraWindow::init() {
         return false;
     }
 
-    // Load font
+    // Load fonts
     const char* fontPaths[] = {
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
@@ -65,10 +67,12 @@ bool CameraWindow::init() {
         return false;
     }
 
-    // Set initial window size to 2x base resolution as requested
-    dprintf("CameraWindow::init() - Setting initial window size to 2x base resolution.\n");
-    currentWidth = baseWidth * 2;
-    currentHeight = baseHeight * 2;
+    // Initialize icons
+    initIcons();
+
+    // Set initial window size
+    currentWidth = (int)(baseWidth * currentScale);
+    currentHeight = (int)(baseHeight * currentScale);
     SDL_SetWindowSize(window, currentWidth, currentHeight + toolbarHeight);
 
     SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
@@ -85,21 +89,34 @@ bool CameraWindow::init() {
         return false;
     }
 
-    SDL_SetWindowMinimumSize(window, baseWidth, baseHeight + toolbarHeight);
+    SDL_SetWindowMinimumSize(window, (int)(baseWidth * 0.5f), (int)(baseHeight * 0.5f) + toolbarHeight);
 
     dprintf("CameraWindow::init() - Success.\n");
     return true;
 }
 
+void CameraWindow::setScale(float scale) {
+    if (scale < 0.5f) scale = 0.5f;
+    if (scale > 16.0f) scale = 16.0f;
+    currentScale = scale;
+
+    currentWidth = (int)(baseWidth * currentScale);
+    currentHeight = (int)(baseHeight * currentScale);
+
+    SDL_SetWindowSize(window, currentWidth, currentHeight + toolbarHeight);
+    SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
+}
+
+float CameraWindow::getScale() const {
+    return currentScale;
+}
+
 void CameraWindow::setRotation(int degrees) {
-    int oldRotation = rotation;
     rotation = degrees % 360;
 
     // Update base dimensions based on rotation
     int origW = 256;
     int origH = 192;
-
-    int oldBaseWidth = baseWidth;
 
     if (rotation == 90 || rotation == 270) {
         baseWidth = origH;
@@ -117,17 +134,12 @@ void CameraWindow::setRotation(int degrees) {
     scaler = Scaler(baseWidth, baseHeight);
 
     // Maintain current scale factor
-    double currentScale = (double) currentWidth / oldBaseWidth;
-
-    int steps = (int) std::round(std::log(currentScale) / (std::log(2.0) / 4.0));
-    double targetScale = std::exp((std::log(2.0) / 4.0) * steps);
-
-    currentWidth = (int) std::round(baseWidth * targetScale);
-    currentHeight = (int) std::round(baseHeight * targetScale);
+    currentWidth = (int) std::round(baseWidth * currentScale);
+    currentHeight = (int) std::round(baseHeight * currentScale);
 
     SDL_SetWindowSize(window, currentWidth, currentHeight + toolbarHeight);
     SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
-    SDL_SetWindowMinimumSize(window, baseWidth, baseHeight + toolbarHeight);
+    SDL_SetWindowMinimumSize(window, (int)(baseWidth * 0.5f), (int)(baseHeight * 0.5f) + toolbarHeight);
 }
 
 void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested) {
@@ -139,24 +151,34 @@ void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested) {
         } else if (e.type == SDL_MOUSEMOTION) {
             mouseX = e.motion.x;
             mouseY = e.motion.y;
-
-            // Check if mouse is over button area (bottom center)
-            int centerX = currentWidth / 2;
-            int centerY = currentHeight + toolbarHeight - 40;
-            int radius = 20;
-            mouseOverButton = isPointInCircle(mouseX, mouseY, centerX, centerY, radius);
+            
+            // Record button in toolbar is at x around 100
+            mouseOverRecordButton = (mouseY < toolbarHeight && mouseX > 80 && mouseX < 120);
         } else if (e.type == SDL_MOUSEBUTTONDOWN) {
             if (e.button.button == SDL_BUTTON_LEFT) {
                 if (mouseY < toolbarHeight) {
                     // Toolbar interaction
-                    if (mouseX > 10 && mouseX < 50) {
+                    // Icon centers: 25, 65, 100, 135, 175, 215. Each hit area approx 35-40px.
+                    if (mouseX >= 5 && mouseX < 45) { // Crosshair (center 25)
                         showMouseTemp = !showMouseTemp;
                         SDL_SetCursor(showMouseTemp ? crosshairCursor : defaultCursor);
-                    } else if (mouseX > 60 && mouseX < 100) {
+                    } else if (mouseX >= 45 && mouseX < 85) { // Rotate CCW (center 65)
+                        setRotation((rotation + 270) % 360);
+                    } else if (mouseX >= 85 && mouseX < 120) { // Record (center 100)
+                        recordToggleRequested = true;
+                    } else if (mouseX >= 120 && mouseX < 155) { // Rotate CW (center 135)
                         setRotation((rotation + 90) % 360);
+                    } else if (mouseX >= 155 && mouseX < 195) { // Zoom - (center 175)
+                        float nextScale = currentScale;
+                        if (currentScale > 1.0f) nextScale = std::floor(currentScale - 0.01f);
+                        else if (currentScale > 0.5f) nextScale = 0.5f;
+                        setScale(nextScale);
+                    } else if (mouseX >= 195 && mouseX < 235) { // Zoom + (center 215)
+                        float nextScale = currentScale;
+                        if (currentScale < 1.0f) nextScale = 1.0f;
+                        else if (currentScale < 16.0f) nextScale = std::ceil(currentScale + 0.01f);
+                        setScale(nextScale);
                     }
-                } else if (mouseOverButton) {
-                    recordToggleRequested = true;
                 } else {
                     showMouseTemp = !showMouseTemp;
                     SDL_SetCursor(showMouseTemp ? crosshairCursor : defaultCursor);
@@ -175,6 +197,7 @@ void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested) {
                 }
                 currentWidth = targetW;
                 currentHeight = targetH;
+                currentScale = (float)currentWidth / (float)baseWidth;
                 SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
             }
         }
@@ -230,23 +253,16 @@ void CameraWindow::render(bool isRecording, bool indicatorVisible, bool isConnec
     SDL_SetRenderDrawColor(renderer, 30, 30, 30, 255);
     SDL_RenderClear(renderer);
 
-    renderToolbar();
+    renderToolbar(isRecording);
 
     if (isConnected) {
         SDL_Rect viewport = {0, toolbarHeight, currentWidth, currentHeight};
         SDL_RenderCopy(renderer, texture, NULL, &viewport);
 
-        // Adjust coordinate system for frame overlays
-        // We'll wrap HotSpot and MouseTemp rendering to account for toolbarHeight
-        
         renderHotSpot(hotSpot);
 
         if (showMouseTemp) {
             renderMouseTemp();
-        }
-
-        if (mouseOverButton) {
-            renderRecordButton(isRecording);
         }
 
         if (isRecording && indicatorVisible) {
@@ -259,41 +275,138 @@ void CameraWindow::render(bool isRecording, bool indicatorVisible, bool isConnec
     SDL_RenderPresent(renderer);
 }
 
-bool CameraWindow::isPointInCircle(int px, int py, int cx, int cy, int radius) {
-    int dx = px - cx;
-    int dy = py - cy;
-    return (dx * dx + dy * dy) <= (radius * radius);
-}
+void CameraWindow::initIcons() {
+    int w, h;
+    
+    // Check if we should use 2x icons (HiDPI)
+    int drawableW, drawableH;
+    SDL_GL_GetDrawableSize(window, &drawableW, &drawableH);
+    int windowW, windowH;
+    SDL_GetWindowSize(window, &windowW, &windowH);
+    
+    bool use2x = (drawableW > windowW);
 
-static void drawFilledCircle(SDL_Renderer* renderer, int x, int y, int radius) {
-    for (int w = -radius; w <= radius; w++) {
-        for (int h = -radius; h <= radius; h++) {
-            if (w * w + h * h <= radius * radius) {
-                SDL_RenderDrawPoint(renderer, x + w, y + h);
-            }
-        }
+    if (use2x) {
+        iconCrosshair.texture = loadIconFromMemory(icon_Crosshair_48, icon_Crosshair_48_width, icon_Crosshair_48_height, icon_Crosshair_48_pitch);
+        iconCrosshair.w = icon_Crosshair_48_width / 2; iconCrosshair.h = icon_Crosshair_48_height / 2;
+
+        iconRotateCCW.texture = loadIconFromMemory(icon_RotateCCW_48, icon_RotateCCW_48_width, icon_RotateCCW_48_height, icon_RotateCCW_48_pitch);
+        iconRotateCCW.w = icon_RotateCCW_48_width / 2; iconRotateCCW.h = icon_RotateCCW_48_height / 2;
+
+        iconRotateCW.texture = loadIconFromMemory(icon_RotateCW_48, icon_RotateCW_48_width, icon_RotateCW_48_height, icon_RotateCW_48_pitch);
+        iconRotateCW.w = icon_RotateCW_48_width / 2; iconRotateCW.h = icon_RotateCW_48_height / 2;
+
+        iconRecord.texture = loadIconFromMemory(icon_Record_48, icon_Record_48_width, icon_Record_48_height, icon_Record_48_pitch);
+        iconRecord.w = icon_Record_48_width / 2; iconRecord.h = icon_Record_48_height / 2;
+
+        iconStop.texture = loadIconFromMemory(icon_Stop_48, icon_Stop_48_width, icon_Stop_48_height, icon_Stop_48_pitch);
+        iconStop.w = icon_Stop_48_width / 2; iconStop.h = icon_Stop_48_height / 2;
+
+        iconZoomIn.texture = loadIconFromMemory(icon_ZoomIn_48, icon_ZoomIn_48_width, icon_ZoomIn_48_height, icon_ZoomIn_48_pitch);
+        iconZoomIn.w = icon_ZoomIn_48_width / 2; iconZoomIn.h = icon_ZoomIn_48_height / 2;
+
+        iconZoomOut.texture = loadIconFromMemory(icon_ZoomOut_48, icon_ZoomOut_48_width, icon_ZoomOut_48_height, icon_ZoomOut_48_pitch);
+        iconZoomOut.w = icon_ZoomOut_48_width / 2; iconZoomOut.h = icon_ZoomOut_48_height / 2;
+    } else {
+        iconCrosshair.texture = loadIconFromMemory(icon_Crosshair_24, icon_Crosshair_24_width, icon_Crosshair_24_height, icon_Crosshair_24_pitch);
+        iconCrosshair.w = icon_Crosshair_24_width; iconCrosshair.h = icon_Crosshair_24_height;
+
+        iconRotateCCW.texture = loadIconFromMemory(icon_RotateCCW_24, icon_RotateCCW_24_width, icon_RotateCCW_24_height, icon_RotateCCW_24_pitch);
+        iconRotateCCW.w = icon_RotateCCW_24_width; iconRotateCCW.h = icon_RotateCCW_24_height;
+
+        iconRotateCW.texture = loadIconFromMemory(icon_RotateCW_24, icon_RotateCW_24_width, icon_RotateCW_24_height, icon_RotateCW_24_pitch);
+        iconRotateCW.w = icon_RotateCW_24_width; iconRotateCW.h = icon_RotateCW_24_height;
+
+        iconRecord.texture = loadIconFromMemory(icon_Record_24, icon_Record_24_width, icon_Record_24_height, icon_Record_24_pitch);
+        iconRecord.w = icon_Record_24_width; iconRecord.h = icon_Record_24_height;
+
+        iconStop.texture = loadIconFromMemory(icon_Stop_24, icon_Stop_24_width, icon_Stop_24_height, icon_Stop_24_pitch);
+        iconStop.w = icon_Stop_24_width; iconStop.h = icon_Stop_24_height;
+
+        iconZoomIn.texture = loadIconFromMemory(icon_ZoomIn_24, icon_ZoomIn_24_width, icon_ZoomIn_24_height, icon_ZoomIn_24_pitch);
+        iconZoomIn.w = icon_ZoomIn_24_width; iconZoomIn.h = icon_ZoomIn_24_height;
+
+        iconZoomOut.texture = loadIconFromMemory(icon_ZoomOut_24, icon_ZoomOut_24_width, icon_ZoomOut_24_height, icon_ZoomOut_24_pitch);
+        iconZoomOut.w = icon_ZoomOut_24_width; iconZoomOut.h = icon_ZoomOut_24_height;
     }
 }
 
-void CameraWindow::renderRecordButton(bool isRecording) {
-    int centerX = currentWidth / 2;
-    int centerY = currentHeight + toolbarHeight - 40;
-    int outerRadius = 20;
-    int innerRadius = 16;
+SDL_Texture* CameraWindow::loadIconFromMemory(const unsigned char* data, int width, int height, int pitch) {
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom((void*)data, width, height, 32, pitch, SDL_PIXELFORMAT_RGBA32);
+    if (!surface) return nullptr;
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FreeSurface(surface);
+    return tex;
+}
 
-    // Draw white/light grey border (outer circle)
-    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
-    drawFilledCircle(renderer, centerX, centerY, outerRadius);
+void CameraWindow::cleanupIcons() {
+    SDL_DestroyTexture(iconCrosshair.texture);
+    SDL_DestroyTexture(iconRotateCCW.texture);
+    SDL_DestroyTexture(iconRotateCW.texture);
+    SDL_DestroyTexture(iconRecord.texture);
+    SDL_DestroyTexture(iconStop.texture);
+    SDL_DestroyTexture(iconZoomIn.texture);
+    SDL_DestroyTexture(iconZoomOut.texture);
+    
+    iconCrosshair.texture = nullptr;
+    iconRotateCCW.texture = nullptr;
+    iconRotateCW.texture = nullptr;
+    iconRecord.texture = nullptr;
+    iconStop.texture = nullptr;
+    iconZoomIn.texture = nullptr;
+    iconZoomOut.texture = nullptr;
+}
 
-    if (!isRecording) {
-        // Standby: Red circle
-        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-        drawFilledCircle(renderer, centerX, centerY, innerRadius);
+void CameraWindow::renderToolbar(bool isRecording) {
+    // Toolbar background
+    SDL_Rect tbRect = {0, 0, currentWidth, toolbarHeight};
+    SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
+    SDL_RenderFillRect(renderer, &tbRect);
+
+    // Separator line
+    SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
+    SDL_RenderDrawLine(renderer, 0, toolbarHeight - 1, currentWidth, toolbarHeight - 1);
+
+    auto drawIcon = [&](IconTexture& icon, int x, bool active) {
+        if (!icon.texture) return;
+        SDL_Rect dest = { x - icon.w / 2, toolbarHeight / 2 - icon.h / 2, icon.w, icon.h };
+        if (active) {
+            SDL_SetTextureColorMod(icon.texture, 0, 255, 0);
+        } else {
+            SDL_SetTextureColorMod(icon.texture, 255, 255, 255);
+        }
+        SDL_RenderCopy(renderer, icon.texture, NULL, &dest);
+    };
+
+    drawIcon(iconCrosshair, 25, showMouseTemp);
+    drawIcon(iconRotateCCW, 65, false);
+    
+    if (isRecording) {
+        SDL_SetTextureColorMod(iconStop.texture, 255, 0, 0); // Red stop icon
+        drawIcon(iconStop, 100, false);
     } else {
-        // Recording: Black square
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_Rect rect = { centerX - 10, centerY - 10, 20, 20 };
-        SDL_RenderFillRect(renderer, &rect);
+        drawIcon(iconRecord, 100, false);
+    }
+
+    drawIcon(iconRotateCW, 135, false);
+    drawIcon(iconZoomOut, 175, false);
+    drawIcon(iconZoomIn, 215, false);
+    
+    // Render current scale text
+    if (font) {
+        char scaleText[16];
+        snprintf(scaleText, sizeof(scaleText), "%.0f%%", currentScale * 100.0f);
+        SDL_Color white = {200, 200, 200, 255};
+        SDL_Surface* surface = TTF_RenderText_Blended(font, scaleText, white);
+        if (surface) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surface);
+            if (tex) {
+                SDL_Rect dest = { 245, toolbarHeight / 2 - surface->h / 2, surface->w, surface->h };
+                SDL_RenderCopy(renderer, tex, NULL, &dest);
+                SDL_DestroyTexture(tex);
+            }
+            SDL_FreeSurface(surface);
+        }
     }
 }
 
@@ -301,7 +414,14 @@ void CameraWindow::renderIndicator() {
     int padding = 20;
     int radius = 8;
     SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    drawFilledCircle(renderer, padding + radius, toolbarHeight + padding + radius, radius);
+    // Draw a simple red circle indicator
+    for (int w = -radius; w <= radius; w++) {
+        for (int h = -radius; h <= radius; h++) {
+            if (w * w + h * h <= radius * radius) {
+                SDL_RenderDrawPoint(renderer, padding + radius + w, toolbarHeight + padding + radius + h);
+            }
+        }
+    }
 }
 
 void CameraWindow::renderMouseTemp() {
@@ -325,7 +445,6 @@ void CameraWindow::renderMouseTemp() {
     snprintf(text, sizeof(text), "%.1f C", tempC);
 
     SDL_Color white = {255, 255, 255, 255};
-    SDL_Color black = {0, 0, 0, 255};
 
     SDL_Surface *surface = TTF_RenderText_Blended(font, text, white);
     if (surface) {
@@ -357,7 +476,7 @@ void CameraWindow::renderScanningMessage() {
     if (surface) {
         SDL_Texture* msgTexture = SDL_CreateTextureFromSurface(renderer, surface);
         if (msgTexture) {
-            SDL_Rect dstRect = { (currentWidth - surface->w) / 2, (currentHeight - surface->h) / 2, surface->w, surface->h };
+            SDL_Rect dstRect = { (currentWidth - surface->w) / 2, (currentHeight - surface->h) / 2 + toolbarHeight, surface->w, surface->h };
             SDL_RenderCopy(renderer, msgTexture, NULL, &dstRect);
             SDL_DestroyTexture(msgTexture);
         }
@@ -450,48 +569,4 @@ void CameraWindow::renderHotSpot(const HotSpotResult& hotSpot) {
         }
         SDL_FreeSurface(shadowSurface);
     }
-}
-
-void CameraWindow::renderToolbar() {
-    // Toolbar background
-    SDL_Rect tbRect = {0, 0, currentWidth, toolbarHeight};
-    SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
-    SDL_RenderFillRect(renderer, &tbRect);
-
-    // Separator line
-    SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
-    SDL_RenderDrawLine(renderer, 0, toolbarHeight - 1, currentWidth, toolbarHeight - 1);
-
-    // 1. Crosshair Icon (Temperature Tooltip Toggle)
-    int chX = 30, chY = toolbarHeight / 2;
-    int chSize = 10;
-    SDL_SetRenderDrawColor(renderer, showMouseTemp ? 0 : 200, showMouseTemp ? 255 : 200, showMouseTemp ? 0 : 200, 255);
-    SDL_RenderDrawLine(renderer, chX - chSize, chY, chX + chSize, chY);
-    SDL_RenderDrawLine(renderer, chX, chY - chSize, chX, chY + chSize);
-    // Outer circle for crosshair
-    for (int i = 0; i < 360; i += 15) {
-        float rad = i * M_PI / 180.0f;
-        float rad2 = (i + 15) * M_PI / 180.0f;
-        SDL_RenderDrawLine(renderer, chX + cos(rad) * 8, chY + sin(rad) * 8, chX + cos(rad2) * 8, chY + sin(rad2) * 8);
-    }
-
-    // 2. Rotate Icon (Anti-clockwise)
-    int rotX = 80, rotY = toolbarHeight / 2;
-    int rotSize = 8;
-    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
-    // Draw an arc (from 45 to 315 degrees, opening at the right)
-    for (int i = 45; i < 315; i += 10) {
-        float rad = i * M_PI / 180.0f;
-        float rad2 = (i + 10) * M_PI / 180.0f;
-        SDL_RenderDrawLine(renderer, rotX + cos(rad) * rotSize, rotY + sin(rad) * rotSize, rotX + cos(rad2) * rotSize,
-                           rotY + sin(rad2) * rotSize);
-    }
-    // Arrow head at the lower opening (315 degrees)
-    float arrowRad = 40 * M_PI / 180.0f;
-    int ax = rotX + cos(arrowRad) * rotSize;
-    int ay = rotY + sin(arrowRad) * rotSize;
-    // Arrow pointing "left" and "up" to look like it continues the anti-clockwise motion
-    // At 315 deg (top-right), pointing towards upper-left means negative x and negative y component relative to tangent
-    SDL_RenderDrawLine(renderer, ax, ay, ax - 5, ay);
-    SDL_RenderDrawLine(renderer, ax, ay, ax - 2, ay + 4);
 }
