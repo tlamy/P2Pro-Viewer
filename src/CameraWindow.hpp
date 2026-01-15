@@ -23,6 +23,8 @@ public:
     void render(bool isRecording, bool indicatorVisible, bool isConnected, const HotSpotResult &hotSpot = {});
 
     void setRotation(int degrees); // 0, 90, 180, 270
+    void setScale(float scale);
+    float getScale() const;
 
 private:
     std::string title;
@@ -32,9 +34,10 @@ private:
     int currentHeight;
     int toolbarHeight = 40;
     int rotation = 0; // 0, 90, 180, 270 degrees anti-clockwise
+    float currentScale = 2.0f;
     int mouseX = 0;
     int mouseY = 0;
-    bool mouseOverButton = false;
+    bool mouseOverRecordButton = false;
     bool showMouseTemp = false;
     std::vector<uint16_t> currentThermal;
     bool darkOutline = true;
@@ -48,19 +51,29 @@ private:
     SDL_Cursor *crosshairCursor = nullptr;
     SDL_Cursor *defaultCursor = nullptr;
 
+    struct IconTexture {
+        SDL_Texture* texture = nullptr;
+        int w = 0;
+        int h = 0;
+    };
+    IconTexture iconCrosshair;
+    IconTexture iconRotateCCW;
+    IconTexture iconRotateCW;
+    IconTexture iconRecord;
+    IconTexture iconStop;
+    IconTexture iconZoomIn;
+    IconTexture iconZoomOut;
+
     bool isPointInCircle(int px, int py, int cx, int cy, int radius);
-
-    void renderRecordButton(bool isRecording);
-
     void renderIndicator();
-
     void renderHotSpot(const HotSpotResult &hotSpot);
-
     void renderMouseTemp();
-
-    void renderToolbar();
-
+    void renderToolbar(bool isRecording);
     void renderScanningMessage();
+    
+    void cleanupIcons();
+    void initIcons();
+    SDL_Texture* loadIconFromMemory(const unsigned char* data, int width, int height, int pitch);
 };
 
 #endif
