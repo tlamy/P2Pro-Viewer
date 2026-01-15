@@ -66,12 +66,8 @@ jobs:
 
       - name: Create App Bundle
         run: |
-          # Use the project's bundle script
-          # The script expects BUILD_DIR="cmake-build-debug" and TARGET="P2ProViewer"
-          # Let's adjust it slightly or link build to cmake-build-debug
-          ln -s build cmake-build-debug
           chmod +x bundle_macos.sh
-          ./bundle_macos.sh
+          BUILD_DIR="build" ./bundle_macos.sh
 
       - name: Create DMG
         run: |

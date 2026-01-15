@@ -3,8 +3,8 @@
 # This script creates a self-contained .app bundle.
 # Requires dylibbundler: brew install dylibbundler
 
-TARGET="P2ProViewer"
-BUILD_DIR="cmake-build-debug"
+TARGET="${TARGET:-P2ProViewer}"
+BUILD_DIR="${BUILD_DIR:-cmake-build-debug}"
 
 if [ ! -f "$BUILD_DIR/$TARGET" ]; then
     echo "Executable $BUILD_DIR/$TARGET not found. Please build the project first."
