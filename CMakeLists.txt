@@ -94,6 +94,26 @@ if (APPLE)
             endif()
         endif()
     endif()
+
+    # Link against required frameworks for SDL2 static
+    find_library(METAL_FRAMEWORK Metal)
+    find_library(QUARTZCORE_FRAMEWORK QuartzCore)
+    find_library(COCOA_FRAMEWORK Cocoa)
+    find_library(CARBON_FRAMEWORK Carbon)
+    find_library(COREAUDIO_FRAMEWORK CoreAudio)
+    find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
+    find_library(FORCEFEEDBACK_FRAMEWORK ForceFeedback)
+    find_library(GAMECONTROLLER_FRAMEWORK GameController)
+    target_link_libraries(P2ProViewer 
+        ${METAL_FRAMEWORK}
+        ${QUARTZCORE_FRAMEWORK}
+        ${COCOA_FRAMEWORK}
+        ${CARBON_FRAMEWORK}
+        ${COREAUDIO_FRAMEWORK}
+        ${AUDIOUNIT_FRAMEWORK}
+        ${FORCEFEEDBACK_FRAMEWORK}
+        ${GAMECONTROLLER_FRAMEWORK}
+    )
     
     # Restore original suffixes
     set(CMAKE_FIND_LIBRARY_SUFFIXES ${ORIG_CMAKE_FIND_LIBRARY_SUFFIXES})
@@ -118,3 +138,19 @@ if(APPLE)
     )
     set_source_files_properties(src/AVFoundationVideoSource.mm src/VideoRecorder_mac.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 endif()
+
+# CPack configuration
+set(CPACK_PACKAGE_NAME "P2ProViewer")
+set(CPACK_PACKAGE_VENDOR "P2Pro")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Viewer for P2 Pro thermal camera")
+set(CPACK_PACKAGE_VERSION "1.0.0") # Will be overridden by semantic-release if needed, but good to have a default
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "P2Pro Maintainer")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsdl2-2.0-0, libsdl2-ttf-2.0-0, libusb-1.0-0, libavcodec58 | libavcodec59 | libavcodec60, libavformat58 | libavformat59 | libavformat60, libswscale5 | libswscale6 | libswscale7, libavutil56 | libavutil57 | libavutil58")
+set(CPACK_GENERATOR "DEB")
+
+install(TARGETS P2ProViewer DESTINATION bin)
+if(NOT APPLE)
+    install(FILES 60-p2pro.rules DESTINATION lib/udev/rules.d)
+endif()
+
+include(CPack)
