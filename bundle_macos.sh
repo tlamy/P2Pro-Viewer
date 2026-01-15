@@ -16,6 +16,11 @@ mkdir -p "$TARGET.app/Contents/MacOS"
 mkdir -p "$TARGET.app/Contents/Resources"
 cp "$BUILD_DIR/$TARGET" "$TARGET.app/Contents/MacOS/"
 
+# Copy icon if it exists
+if [ -f "Resources/P2ProViewer.icns" ]; then
+    cp "Resources/P2ProViewer.icns" "$TARGET.app/Contents/Resources/"
+fi
+
 # Create a basic PkgInfo
 echo "APPL????" > "$TARGET.app/Contents/PkgInfo"
 
@@ -34,6 +39,8 @@ cat <<EOF > "$TARGET.app/Contents/Info.plist"
     <string>com.p2pro.$TARGET</string>
     <key>CFBundleName</key>
     <string>$TARGET</string>
+    <key>CFBundleIconFile</key>
+    <string>P2ProViewer.icns</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
