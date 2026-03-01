@@ -23,6 +23,18 @@ project(P2ProViewer)
 
 set(CMAKE_CXX_STANDARD 17)
 
+if(DEFINED APP_VERSION AND NOT APP_VERSION STREQUAL "")
+    string(REPLACE "." ";" _ver_list "${APP_VERSION}")
+    list(GET _ver_list 0 APP_VERSION_MAJOR)
+    list(GET _ver_list 1 APP_VERSION_MINOR)
+    list(GET _ver_list 2 APP_VERSION_PATCH)
+else()
+    set(APP_VERSION "0.0.0")
+    set(APP_VERSION_MAJOR 0)
+    set(APP_VERSION_MINOR 0)
+    set(APP_VERSION_PATCH 0)
+endif()
+
 if(WIN32 AND NOT DEFINED USE_FFMPEG)
     set(USE_FFMPEG OFF CACHE BOOL "Use FFmpeg for video recording")
 else()
@@ -101,6 +113,8 @@ if (APPLE)
     set_target_properties(P2ProViewer PROPERTIES
             MACOSX_BUNDLE TRUE
             MACOSX_BUNDLE_ICON_FILE P2ProViewer.icns
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "${APP_VERSION}"
+            MACOSX_BUNDLE_BUNDLE_VERSION "${APP_VERSION}"
     )
     set_source_files_properties(Resources/P2ProViewer.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 elseif(WIN32)
@@ -118,6 +132,13 @@ elseif(WIN32)
     else()
         list(APPEND WIN32_SOURCES src/VideoRecorder_win.cpp)
     endif()
+
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/src/P2ProViewer.rc.in"
+        "${CMAKE_BINARY_DIR}/P2ProViewer.rc"
+        @ONLY
+    )
+    list(APPEND WIN32_SOURCES "${CMAKE_BINARY_DIR}/P2ProViewer.rc")
 
     add_executable(P2ProViewer ${WIN32_SOURCES})
     
@@ -261,7 +282,7 @@ endif()
 set(CPACK_PACKAGE_NAME "P2ProViewer")
 set(CPACK_PACKAGE_VENDOR "P2Pro")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Viewer for P2 Pro thermal camera")
-set(CPACK_PACKAGE_VERSION "1.0.0") # Will be overridden by semantic-release if needed, but good to have a default
+set(CPACK_PACKAGE_VERSION "${APP_VERSION}")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "P2Pro Maintainer")
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsdl2-2.0-0, libsdl2-ttf-2.0-0, libusb-1.0-0, libavcodec58 | libavcodec59 | libavcodec60, libavformat58 | libavformat59 | libavformat60, libswscale5 | libswscale6 | libswscale7, libavutil56 | libavutil57 | libavutil58")
 set(CPACK_GENERATOR "DEB")
