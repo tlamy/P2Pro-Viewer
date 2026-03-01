@@ -1,3 +1,15 @@
+# [1.2.0](https://github.com/tlamy/P2Pro-Viewer/compare/v1.1.1...v1.2.0) (2026-03-01)
+
+
+### Bug Fixes
+
+* fixed windows compile errors ([2b950a2](https://github.com/tlamy/P2Pro-Viewer/commit/2b950a2cfbd65445d063e133f42bdc7da5c5a3f0))
+
+
+### Features
+
+* software colorization, gamma correction, preferences ([813f83a](https://github.com/tlamy/P2Pro-Viewer/commit/813f83a79768e9d345ec68d3ac5b3f273d94461f))
+
 ## [1.1.1](https://github.com/tlamy/P2Pro-Viewer/compare/v1.1.0...v1.1.1) (2026-03-01)
 
 
