@@ -1,5 +1,6 @@
 #include "ColorConversion.hpp"
 #include <algorithm>
+#include <cmath>
 
 namespace ColorConversion {
 
@@ -109,7 +110,7 @@ void applyPalette(const uint16_t* thermal, uint8_t* rgb, int width, int height, 
         norm = std::max(0.0f, std::min(1.0f, norm));
 
         if (gamma != 1.0f) {
-            norm = std::pow(norm, gamma);
+            norm = std::pow(norm, (float)gamma);
         }
 
         uint8_t r, g, b;
@@ -136,7 +137,7 @@ void applyPalette(const uint16_t* thermal, uint8_t* rgb, int width, int height, 
                 float h = (1.0f - norm) * 240.0f; 
                 float s = 1.0f, v = 1.0f;
                 float c = v * s;
-                float x = c * (1.0f - std::abs(std::fmod(h / 60.0f, 2.0f) - 1.0f));
+                float x = c * (1.0f - std::abs(std::fmod(h / 60.0f, (float)2.0f) - 1.0f));
                 float m = v - c;
                 float r_, g_, b_;
                 if (h < 60) { r_ = c; g_ = x; b_ = 0; }
@@ -155,7 +156,7 @@ void applyPalette(const uint16_t* thermal, uint8_t* rgb, int width, int height, 
                 float h = norm * 240.0f;
                 float s = 1.0f, v = 1.0f;
                 float c = v * s;
-                float x = c * (1.0f - std::abs(std::fmod(h / 60.0f, 2.0f) - 1.0f));
+                float x = c * (1.0f - std::abs(std::fmod(h / 60.0f, (float)2.0f) - 1.0f));
                 float m = v - c;
                 float r_, g_, b_;
                 if (h < 60) { r_ = c; g_ = x; b_ = 0; }

@@ -376,8 +376,6 @@ void CameraWindow::render(bool isRecording, bool indicatorVisible, bool isConnec
 }
 
 void CameraWindow::initIcons() {
-    int w, h;
-    
     // Check if we should use 2x icons (HiDPI)
     int drawableW, drawableH;
     SDL_GL_GetDrawableSize(window, &drawableW, &drawableH);
@@ -553,9 +551,12 @@ void CameraWindow::renderToolbar(bool isRecording) {
 
     // DevMode button
     if (font) {
-        SDL_Color white = devMode ? (SDL_Color){0, 255, 0, 255} : (SDL_Color){200, 200, 200, 255};
-        if (mouseOverDevModeButton) white = {0, 255, 255, 255};
-        SDL_Surface* surface = TTF_RenderText_Blended(font, "DEV", white);
+        SDL_Color green = {0, 255, 0, 255};
+        SDL_Color grey = {200, 200, 200, 255};
+        SDL_Color cyan = {0, 255, 255, 255};
+        SDL_Color textColor = devMode ? green : grey;
+        if (mouseOverDevModeButton) textColor = cyan;
+        SDL_Surface* surface = TTF_RenderText_Blended(font, "DEV", textColor);
         if (surface) {
             SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surface);
             if (tex) {
