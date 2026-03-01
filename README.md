@@ -22,15 +22,28 @@ brew install sdl2 sdl2_ttf
 sudo apt install libsdl2-dev libusb-1.0-0-dev libavcodec-dev libavformat-dev libswscale-dev libavutil-dev
 ```
 
+## Windows
+It is recommended to use [vcpkg](https://github.com/microsoft/vcpkg) in manifest mode to manage dependencies.
+1. Ensure you have `vcpkg` installed on your system.
+2. Set the `VCPKG_ROOT` environment variable to your `vcpkg` installation directory.
+3. When configuring the project with CMake, `vcpkg` will automatically download and install the required libraries (`sdl2`, `sdl2-ttf`, `libusb`).
+
+Video recording on Windows uses native Media Foundation APIs instead of FFmpeg.
+
 ## Notices
 ### Windows
-For sending vendor control transfers to the UVC camera in addition to opening the camera as a normal UVC camera, libusb needs to be installed as an upper filter driver.  
-This can be installed relatively easily using Zadig.  
-- Options > List all devices
-- Select "USB Camera (Interface 0)"
-- Scroll to "libusb-win32" and select "Install filter driver" from the dropdown besides "Replace driver"
+For sending vendor control transfers to the UVC camera in addition to opening the camera as a normal UVC camera, `libusb` needs to be able to access the device. On Windows, this requires installing a **Filter Driver** (not a full replacement) so both the video stream and control commands can work simultaneously.
 
-Also, the camera video stream needs to be opened first before using the script to send commands to it, otherwise the call to libusb will just hang for whatever reason.
+**To fix "Device not found" or "Permission denied" errors on Windows:**
+1.  Download and run [Zadig](https://zadig.akeo.ie/).
+2.  Go to **Options** > **List All Devices**.
+3.  Select **"USB Camera (Interface 0)"** (VID: `0BDA`, PID: `5830`).
+4.  In the driver selection box (next to the green arrow), select **`libusb-win32`** or **`WinUSB`**.
+5.  **CRITICAL**: Click the **small down arrow** next to the big button and select **"Install Filter Driver"**.
+    *   *Do **not** click "Replace Driver" directly, as that will disable the camera for all other Windows applications.*
+6.  Restart the P2ProViewer.
+
+Also, the camera video stream needs to be opened first before sending commands to it, otherwise the call to `libusb` will just hang for whatever reason. This is handled automatically by the `WindowsAdapter` in this project.
 
 ### Linux
 

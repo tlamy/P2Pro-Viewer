@@ -1,6 +1,7 @@
 #include "P2Pro.hpp"
 #include "CameraWindow.hpp"
 #include "VideoRecorder.hpp"
+#include "ColorConversion.hpp"
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -128,11 +129,9 @@ HotSpotResult detectHotSpot(const P2ProFrame &frame, bool previouslyFound) {
     return res;
 }
 
-void annotateFrame(P2ProFrame &frame, const HotSpotResult &res) {
+void annotateFrame(uint8_t* rgb, int width, int height, const HotSpotResult &res, TTF_Font* font) {
     if (!res.found) return;
 
-    int width = 256;
-    int height = 192;
     uint8_t r = 255 - res.r;
     uint8_t g = 255 - res.g;
     uint8_t b = 255 - res.b;
@@ -142,16 +141,35 @@ void annotateFrame(P2ProFrame &frame, const HotSpotResult &res) {
     for (int i = -crossSize; i <= crossSize; ++i) {
         if (res.x + i >= 0 && res.x + i < width) {
             int idx = (res.y * width + (res.x + i)) * 3;
-            frame.rgb[idx] = r;
-            frame.rgb[idx + 1] = g;
-            frame.rgb[idx + 2] = b;
+            rgb[idx] = r;
+            rgb[idx + 1] = g;
+            rgb[idx + 2] = b;
         }
         if (res.y + i >= 0 && res.y + i < height) {
             int idx = ((res.y + i) * width + res.x) * 3;
-            frame.rgb[idx] = r;
-            frame.rgb[idx + 1] = g;
-            frame.rgb[idx + 2] = b;
+            rgb[idx] = r;
+            rgb[idx + 1] = g;
+            rgb[idx + 2] = b;
         }
+    }
+
+    // Draw temperature text
+    char text[32];
+    snprintf(text, sizeof(text), "%.1f C", res.tempC);
+    
+    // Contrast colors for shadow
+    SDL_Color mainColor = { r, g, b, 255 };
+    uint8_t bv = (res.r + res.g + res.b > 384) ? 0 : 255;
+    SDL_Color shadowColor = { bv, bv, bv, 255 };
+
+    // Position text near crosshair, ensuring it stays within bounds
+    int tx = res.x + 12;
+    int ty = res.y - 12;
+    if (tx + 60 > width) tx = res.x - 65; // Extended for safety at larger scales
+    if (ty < 15) ty = res.y + 20;
+
+    if (font) {
+        ColorConversion::drawTTFText(rgb, width, height, tx, ty, text, font, mainColor, shadowColor);
     }
 }
 
@@ -195,9 +213,14 @@ int main(int argc, char *argv[]) {
         auto lastConnectAttempt = std::chrono::steady_clock::now();
         bool recordToggleRequested = false;
         HotSpotResult hs;
+        std::vector<uint8_t> recordingBuffer;
+        std::vector<uint8_t> rotationBuffer;
+        int recWidth = 0, recHeight = 0;
+        float recScale = 1.0f;
+        int recRotation = 0;
 
         while (running) {
-            window.pollEvents(running, recordToggleRequested);
+            window.pollEvents(running, recordToggleRequested, recorder.isRecording());
 
             if (!cameraConnected) {
                 auto now = std::chrono::steady_clock::now();
@@ -214,9 +237,24 @@ int main(int argc, char *argv[]) {
             if (recordToggleRequested && cameraConnected) {
                 if (recorder.isRecording()) {
                     recorder.stop();
+                    recordingBuffer.clear();
+                    rotationBuffer.clear();
                 } else {
-                    // Start recording (256x192 at 25 fps)
-                    recorder.start(256, 192, 25.0);
+                    recScale = window.getScale();
+                    recRotation = window.getRotation();
+                    
+                    int baseW = 256;
+                    int baseH = 192;
+                    if (recRotation == 90 || recRotation == 270) {
+                        std::swap(baseW, baseH);
+                    }
+
+                    recWidth = (int)(baseW * recScale);
+                    recHeight = (int)(baseH * recScale);
+                    recordingBuffer.resize(recWidth * recHeight * 3);
+                    rotationBuffer.resize(256 * 192 * 3);
+                    // Start recording (recWidth x recHeight at 25 fps)
+                    recorder.start(recWidth, recHeight, 25.0);
                 }
             }
 
@@ -230,9 +268,42 @@ int main(int argc, char *argv[]) {
                     window.updateFrame(frame.rgb, frame.thermal, 256, 192);
 
                     if (recorder.isRecording()) {
-                        P2ProFrame annotated = frame;
-                        annotateFrame(annotated, hs);
-                        recorder.writeFrame(annotated.rgb);
+                        const uint8_t* srcRgb = frame.rgb.data();
+                        int srcW = 256;
+                        int srcH = 192;
+
+                        if (recRotation != 0) {
+                            ColorConversion::rotateRGB24(frame.rgb.data(), 256, 192, rotationBuffer.data(), recRotation);
+                            srcRgb = rotationBuffer.data();
+                            if (recRotation == 90 || recRotation == 270) {
+                                std::swap(srcW, srcH);
+                            }
+                        }
+
+                        ColorConversion::scaleRGB24(srcRgb, srcW, srcH, recordingBuffer.data(), recWidth, recHeight);
+                        
+                        HotSpotResult scaledHs = hs;
+                        // Transform hs coordinates based on rotation
+                        if (recRotation == 90) {
+                            int nx = hs.y;
+                            int ny = 256 - 1 - hs.x;
+                            scaledHs.x = nx;
+                            scaledHs.y = ny;
+                        } else if (recRotation == 180) {
+                            scaledHs.x = 256 - 1 - hs.x;
+                            scaledHs.y = 192 - 1 - hs.y;
+                        } else if (recRotation == 270) {
+                            int nx = 192 - 1 - hs.y;
+                            int ny = hs.x;
+                            scaledHs.x = nx;
+                            scaledHs.y = ny;
+                        }
+
+                        scaledHs.x = (int)(scaledHs.x * recScale);
+                        scaledHs.y = (int)(scaledHs.y * recScale);
+                        
+                        annotateFrame(recordingBuffer.data(), recWidth, recHeight, scaledHs, window.getRecordingFont());
+                        recorder.writeFrame(recordingBuffer.data());
                     }
                 } else {
                     dprintf("Camera disconnected!\n");

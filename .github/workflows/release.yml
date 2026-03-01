@@ -89,9 +89,43 @@ jobs:
           name: macos-dmg
           path: dist/*.dmg
 
+  build-windows:
+    name: Build Windows (.zip)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DUSE_FFMPEG=OFF `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $dist = "dist/P2ProViewer-Windows"
+          New-Item -ItemType Directory -Force -Path $dist
+          Copy-Item "build/Release/P2ProViewer.exe" $dist
+          Copy-Item "build/Release/*.dll" $dist -ErrorAction SilentlyContinue
+          Compress-Archive -Path $dist -DestinationPath "dist/P2ProViewer-windows.zip"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: dist/P2ProViewer-windows.zip
+
   release:
     name: Release
-    needs: [build-linux, build-macos]
+    needs: [build-linux, build-macos, build-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -109,6 +143,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: macos-dmg
+          path: dist
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-zip
           path: dist
 
       - name: Setup Node.js

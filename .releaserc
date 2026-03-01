@@ -7,7 +7,8 @@
     ["@semantic-release/github", {
       "assets": [
         {"path": "dist/*.deb", "label": "Linux Debian/Ubuntu Package"},
-        {"path": "dist/*.dmg", "label": "macOS Disk Image"}
+        {"path": "dist/*.dmg", "label": "macOS Disk Image"},
+        {"path": "dist/P2ProViewer-windows.zip", "label": "Windows Portable (.zip)"}
       ]
     }],
     ["@semantic-release/git", {

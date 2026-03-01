@@ -124,7 +124,11 @@ void VideoRecorder::cleanup() {
 }
 
 void VideoRecorder::writeFrame(const std::vector<uint8_t>& rgb_data) {
-    if (!recording || rgb_data.empty()) return;
+    writeFrame(rgb_data.data());
+}
+
+void VideoRecorder::writeFrame(const uint8_t* rgb_data) {
+    if (!recording || !rgb_data) return;
 
     VideoRecorderImpl* v = static_cast<VideoRecorderImpl*>(impl);
     if (!v->recorder.input.isReadyForMoreMediaData) return;
@@ -147,7 +151,7 @@ void VideoRecorder::writeFrame(const std::vector<uint8_t>& rgb_data) {
 
         for (int y = 0; y < height; ++y) {
             uint8_t *dst = baseAddress + y * bytesPerRow;
-            const uint8_t *src = rgb_data.data() + y * width * 3;
+            const uint8_t *src = rgb_data + y * width * 3;
             for (int x = 0; x < width; ++x) {
                 dst[x*4 + 0] = src[x*3 + 2]; // B
                 dst[x*4 + 1] = src[x*3 + 1]; // G

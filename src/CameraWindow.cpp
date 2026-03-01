@@ -1,6 +1,7 @@
 #include "CameraWindow.hpp"
 #include "P2Pro.hpp"
 #include "Icons.hpp"
+#include "ColorConversion.hpp"
 #include <iostream>
 #include <cmath>
 
@@ -12,6 +13,7 @@ CameraWindow::CameraWindow(const std::string& title, int width, int height)
 CameraWindow::~CameraWindow() {
     cleanupIcons();
     if (font) TTF_CloseFont(font);
+    if (recordingFont) TTF_CloseFont(recordingFont);
     TTF_Quit();
     if (texture) SDL_DestroyTexture(texture);
     if (crosshairCursor) SDL_FreeCursor(crosshairCursor);
@@ -35,16 +37,19 @@ bool CameraWindow::init() {
 
     // Load fonts
     const char* fontPaths[] = {
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/System/Library/Fonts/Helvetica.ttc",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "C:/Windows/Fonts/arial.ttf",                        // Windows
+        "C:/Windows/Fonts/segoeui.ttf",                      // Windows fallback
+        "/System/Library/Fonts/Supplemental/Arial.ttf",      // macOS
+        "/System/Library/Fonts/Helvetica.ttc",               // macOS fallback
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",   // Linux
         "Arial.ttf" // Fallback to current directory
     };
 
     for (const char* path : fontPaths) {
         font = TTF_OpenFont(path, 16);
+        recordingFont = TTF_OpenFont(path, 16); // Revert recording font back to same size as standard font
         if (font) {
-            dprintf("CameraWindow::init() - Loaded font: %s\n", path);
+            dprintf("CameraWindow::init() - Loaded font: %s (size 16)\n", path);
             break;
         }
     }
@@ -142,7 +147,7 @@ void CameraWindow::setRotation(int degrees) {
     SDL_SetWindowMinimumSize(window, (int)(baseWidth * 0.5f), (int)(baseHeight * 0.5f) + toolbarHeight);
 }
 
-void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested) {
+void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested, bool isRecording) {
     SDL_Event e;
     recordToggleRequested = false;
     while (SDL_PollEvent(&e) != 0) {
@@ -163,21 +168,25 @@ void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested) {
                         showMouseTemp = !showMouseTemp;
                         SDL_SetCursor(showMouseTemp ? crosshairCursor : defaultCursor);
                     } else if (mouseX >= 45 && mouseX < 85) { // Rotate CCW (center 65)
-                        setRotation((rotation + 270) % 360);
+                        if (!isRecording) setRotation((rotation + 270) % 360);
                     } else if (mouseX >= 85 && mouseX < 120) { // Record (center 100)
                         recordToggleRequested = true;
                     } else if (mouseX >= 120 && mouseX < 155) { // Rotate CW (center 135)
-                        setRotation((rotation + 90) % 360);
+                        if (!isRecording) setRotation((rotation + 90) % 360);
                     } else if (mouseX >= 155 && mouseX < 195) { // Zoom - (center 175)
-                        float nextScale = currentScale;
-                        if (currentScale > 1.0f) nextScale = std::floor(currentScale - 0.01f);
-                        else if (currentScale > 0.5f) nextScale = 0.5f;
-                        setScale(nextScale);
+                        if (!isRecording) {
+                            float nextScale = currentScale;
+                            if (currentScale > 1.0f) nextScale = std::floor(currentScale - 0.01f);
+                            else if (currentScale > 0.5f) nextScale = 0.5f;
+                            setScale(nextScale);
+                        }
                     } else if (mouseX >= 195 && mouseX < 235) { // Zoom + (center 215)
-                        float nextScale = currentScale;
-                        if (currentScale < 1.0f) nextScale = 1.0f;
-                        else if (currentScale < 16.0f) nextScale = std::ceil(currentScale + 0.01f);
-                        setScale(nextScale);
+                        if (!isRecording) {
+                            float nextScale = currentScale;
+                            if (currentScale < 1.0f) nextScale = 1.0f;
+                            else if (currentScale < 16.0f) nextScale = std::ceil(currentScale + 0.01f);
+                            setScale(nextScale);
+                        }
                     }
                 } else {
                     showMouseTemp = !showMouseTemp;
@@ -186,19 +195,24 @@ void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested) {
             }
         } else if (e.type == SDL_WINDOWEVENT) {
             if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
-                int newW = e.window.data1;
-                int newH = e.window.data2 - toolbarHeight;
+                if (isRecording) {
+                    // Ignore resize when recording
+                    SDL_SetWindowSize(window, currentWidth, currentHeight + toolbarHeight);
+                } else {
+                    int newW = e.window.data1;
+                    int newH = e.window.data2 - toolbarHeight;
 
-                int targetW, targetH;
-                scaler.getScaledSize(newW, newH, targetW, targetH);
+                    int targetW, targetH;
+                    scaler.getScaledSize(newW, newH, targetW, targetH);
 
-                if (newW != targetW || (e.window.data2 != targetH + toolbarHeight)) {
-                    SDL_SetWindowSize(window, targetW, targetH + toolbarHeight);
+                    if (newW != targetW || (e.window.data2 != targetH + toolbarHeight)) {
+                        SDL_SetWindowSize(window, targetW, targetH + toolbarHeight);
+                    }
+                    currentWidth = targetW;
+                    currentHeight = targetH;
+                    currentScale = (float)currentWidth / (float)baseWidth;
+                    SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
                 }
-                currentWidth = targetW;
-                currentHeight = targetH;
-                currentScale = (float)currentWidth / (float)baseWidth;
-                SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
             }
         }
     }
@@ -212,38 +226,12 @@ void CameraWindow::updateFrame(const std::vector<uint8_t> &rgb_data, const std::
         currentThermal = thermal_data;
     } else {
         // Rotate
-        int origW = 256;
-        int origH = 192;
-        std::vector<uint8_t> rotRGB(origW * origH * 3);
-        std::vector<uint16_t> rotThermal(origW * origH);
+        std::vector<uint8_t> rotRGB(256 * 192 * 3);
+        std::vector<uint16_t> rotThermal(256 * 192);
 
-        for (int y = 0; y < origH; ++y) {
-            for (int x = 0; x < origW; ++x) {
-                int nx, ny;
-                if (rotation == 90) {
-                    // Anti-clockwise
-                    nx = y;
-                    ny = origW - 1 - x;
-                } else if (rotation == 180) {
-                    nx = origW - 1 - x;
-                    ny = origH - 1 - y;
-                } else if (rotation == 270) {
-                    nx = origH - 1 - y;
-                    ny = x;
-                } else {
-                    nx = x;
-                    ny = y;
-                }
+        ColorConversion::rotateRGB24(rgb_data.data(), 256, 192, rotRGB.data(), rotation);
+        ColorConversion::rotateThermal(thermal_data.data(), 256, 192, rotThermal.data(), rotation);
 
-                int oldIdx = (y * origW + x);
-                int newIdx = (ny * baseWidth + nx);
-
-                rotRGB[newIdx * 3] = rgb_data[oldIdx * 3];
-                rotRGB[newIdx * 3 + 1] = rgb_data[oldIdx * 3 + 1];
-                rotRGB[newIdx * 3 + 2] = rgb_data[oldIdx * 3 + 2];
-                rotThermal[newIdx] = thermal_data[oldIdx];
-            }
-        }
         SDL_UpdateTexture(texture, NULL, rotRGB.data(), baseWidth * 3);
         currentThermal = rotThermal;
     }
@@ -367,10 +355,12 @@ void CameraWindow::renderToolbar(bool isRecording) {
     SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
     SDL_RenderDrawLine(renderer, 0, toolbarHeight - 1, currentWidth, toolbarHeight - 1);
 
-    auto drawIcon = [&](IconTexture& icon, int x, bool active) {
+    auto drawIcon = [&](IconTexture& icon, int x, bool active, bool disabled = false) {
         if (!icon.texture) return;
         SDL_Rect dest = { x - icon.w / 2, toolbarHeight / 2 - icon.h / 2, icon.w, icon.h };
-        if (active) {
+        if (disabled) {
+            SDL_SetTextureColorMod(icon.texture, 80, 80, 80); // Grayed out
+        } else if (active) {
             SDL_SetTextureColorMod(icon.texture, 0, 255, 0);
         } else {
             SDL_SetTextureColorMod(icon.texture, 255, 255, 255);
@@ -379,7 +369,7 @@ void CameraWindow::renderToolbar(bool isRecording) {
     };
 
     drawIcon(iconCrosshair, 25, showMouseTemp);
-    drawIcon(iconRotateCCW, 65, false);
+    drawIcon(iconRotateCCW, 65, false, isRecording);
     
     if (isRecording) {
         SDL_SetTextureColorMod(iconStop.texture, 255, 0, 0); // Red stop icon
@@ -388,9 +378,9 @@ void CameraWindow::renderToolbar(bool isRecording) {
         drawIcon(iconRecord, 100, false);
     }
 
-    drawIcon(iconRotateCW, 135, false);
-    drawIcon(iconZoomOut, 175, false);
-    drawIcon(iconZoomIn, 215, false);
+    drawIcon(iconRotateCW, 135, false, isRecording);
+    drawIcon(iconZoomOut, 175, false, isRecording);
+    drawIcon(iconZoomIn, 215, false, isRecording);
     
     // Render current scale text
     if (font) {

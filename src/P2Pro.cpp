@@ -1,6 +1,19 @@
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <winsock2.h>
+#include <windows.h>
+#endif
 #include "P2Pro.hpp"
+#include <algorithm>
 #ifdef __APPLE__
 #include "MacOSAdapter.hpp"
+#elif defined(_WIN32)
+#include "WindowsAdapter.hpp"
 #else
 #include "LinuxAdapter.hpp"
 #endif
@@ -31,9 +44,14 @@ void dprintf(const char *format, ...) {
 P2Pro::P2Pro() {
 #ifdef __APPLE__
     adapter = std::make_unique<MacOSAdapter>();
+#elif defined(_WIN32)
+    adapter = std::make_unique<WindowsAdapter>();
 #else
     adapter = std::make_unique<LinuxAdapter>();
 #endif
+    is_swapped = false;
+    swap_vote = 0;
+    frames_since_connect = 0;
 }
 
 P2Pro::~P2Pro() {
@@ -41,15 +59,19 @@ P2Pro::~P2Pro() {
 }
 
 bool P2Pro::connect() {
-    // 1. Try to connect via USB for control commands first.
-    if (!adapter->connect(VID, PID)) {
-        dprintf("P2Pro::connect() - Failed to connect via USB for commands.\n");
+    is_swapped = false;
+    swap_vote = 0;
+    frames_since_connect = 0;
+
+    // 1. Then try to open video stream FIRST (as required on Windows and some other platforms)
+    if (!adapter->open_video()) {
+        dprintf("P2Pro::connect() - Failed to open video stream.\n");
         return false;
     }
 
-    // 2. Then try to open video stream.
-    if (!adapter->open_video()) {
-        dprintf("P2Pro::connect() - Failed to open video stream.\n");
+    // 2. Try to connect via USB for control commands.
+    if (!adapter->connect(VID, PID)) {
+        dprintf("P2Pro::connect() - Failed to connect via USB for commands.\n");
         return false;
     }
 
@@ -66,53 +88,71 @@ bool P2Pro::get_frame(P2ProFrame &out_frame) {
 
     // Expected size: 256 * 384 * 2 = 196608
     if (raw_data.size() < 196608) {
+        dprintf("P2Pro::get_frame() - unexpected frame size %zu (need 196608)\n", raw_data.size());
         return false;
     }
 
-    // Split raw_data
-    // One half is pseudo-color (YUYV), one half is thermal (Y16).
-    // Usually: Top 256x192 is pseudo-color, Bottom 256x192 is thermal.
-    // However, depending on backend or camera version, they might be swapped.
-    // We detect which is which by calculating the variance/difference between 
-    // the bytes that would be U and V in a YUYV image. 
-    // In Y16 data (L0, H0, L1, H1), U=H0 and V=H1, which are almost identical.
-    // In Pseudo-color YUYV, U and V differ significantly.
-
     const size_t half_size = 256 * 192 * 2;
-    long top_uv_diff = 0;
-    long bot_uv_diff = 0;
-
-    // Sample a few pixels to determine which half is pseudo-color
-    for (size_t i = 0; i < half_size; i += 8) {
-        // Index 1 and 3 are U0 and V0 components when interpreted as YUYV
-        top_uv_diff += std::abs((int) raw_data[i + 1] - (int) raw_data[i + 3]);
-    }
-    for (size_t i = half_size; i < half_size * 2; i += 8) {
-        bot_uv_diff += std::abs((int) raw_data[i + 1] - (int) raw_data[i + 3]);
-    }
-
     uint8_t *pseudo_ptr;
     uint8_t *thermal_ptr;
-    bool swapped = false;
 
-    if (bot_uv_diff > top_uv_diff) {
-        // Bottom half has more color variance, it's likely the pseudo-color image
-        pseudo_ptr = raw_data.data() + half_size;
-        thermal_ptr = raw_data.data();
-        swapped = true;
-    } else {
-        // Top half is likely pseudo-color
-        pseudo_ptr = raw_data.data();
-        thermal_ptr = raw_data.data() + half_size;
+    // We perform auto-detection for the first 30 frames after connection.
+    // The frame layout shouldn't change during an active connection.
+    if (frames_since_connect < 30) {
+        long top_uv_diff = 0;
+        long bot_uv_diff = 0;
+        long top_y_var = 0;
+        long bot_y_var = 0;
+
+        // Sample pixels to determine which half is pseudo-color vs thermal
+        for (size_t i = 0; i < half_size; i += 8) {
+            top_uv_diff += std::abs((int) raw_data[i + 1] - (int) raw_data[i + 3]);
+            top_y_var += std::abs((int) raw_data[i] - (int) raw_data[i + 2]);
+        }
+        for (size_t i = half_size; i < half_size * 2; i += 8) {
+            bot_uv_diff += std::abs((int) raw_data[i + 1] - (int) raw_data[i + 3]);
+            bot_y_var += std::abs((int) raw_data[i] - (int) raw_data[i + 2]);
+        }
+
+        // Weight the decision.
+        // A real color image has significant UV variance.
+        // Thermal data (Y16 interpreted as YUYV) has very low UV variance but high Y variance (L-bytes).
+        // A threshold of 2000 for the sum of UV differences over 6144 samples is safer than 50.
+        const long uv_threshold = 2000;
+        
+        if (std::abs(bot_uv_diff - top_uv_diff) > uv_threshold) {
+            if (bot_uv_diff > top_uv_diff) swap_vote++; else swap_vote--;
+        } else {
+            // If UV is inconclusive, the thermal half (interpreted as YUYV) 
+            // will have much higher Y-variance (L0 vs L1) than the pseudo-color half.
+            if (top_y_var > bot_y_var) swap_vote++; else swap_vote--;
+        }
+
+        // Clamp vote
+        if (swap_vote > 15) swap_vote = 15;
+        if (swap_vote < -15) swap_vote = -15;
+
+        bool new_swapped = (swap_vote > 0);
+        if (frames_since_connect == 0 || new_swapped != is_swapped) {
+            dprintf("P2Pro::get_frame() - Auto-detect (frame %d): %s (Top UV: %ld, Y: %ld | Bot UV: %ld, Y: %ld)\n",
+                    frames_since_connect,
+                    new_swapped ? "Swapped (Pseudo in bottom)" : "Standard (Pseudo in top)",
+                    top_uv_diff, top_y_var, bot_uv_diff, bot_y_var);
+            is_swapped = new_swapped;
+        }
+        frames_since_connect++;
+        
+        if (frames_since_connect == 30) {
+            dprintf("P2Pro::get_frame() - Detection locked: %s\n", is_swapped ? "Swapped" : "Standard");
+        }
     }
 
-    static bool first_detection = true;
-    static bool last_swapped = false;
-    if (first_detection || swapped != last_swapped) {
-        dprintf("P2Pro::get_frame() - Auto-detect: %s (Top UV diff sum: %ld, Bot UV diff sum: %ld)\n",
-                swapped ? "Swapped (Pseudo in bottom)" : "Standard (Pseudo in top)", top_uv_diff, bot_uv_diff);
-        first_detection = false;
-        last_swapped = swapped;
+    if (is_swapped) {
+        pseudo_ptr = raw_data.data() + half_size;
+        thermal_ptr = raw_data.data();
+    } else {
+        pseudo_ptr = raw_data.data();
+        thermal_ptr = raw_data.data() + half_size;
     }
 
     // YUYV to RGB
@@ -141,6 +181,7 @@ bool P2Pro::block_until_camera_ready(int timeout_ms) {
     auto start = std::chrono::steady_clock::now();
     while (true) {
         if (check_camera_ready()) return true;
+        if (!adapter->is_connected()) return true;  // No USB — skip the wait
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count() > timeout_ms) {

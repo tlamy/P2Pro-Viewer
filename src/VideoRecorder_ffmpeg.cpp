@@ -190,15 +190,17 @@ void VideoRecorder::cleanup() {
 }
 
 void VideoRecorder::writeFrame(const std::vector<uint8_t>& rgb_data) {
+    writeFrame(rgb_data.data());
+}
+
+void VideoRecorder::writeFrame(const uint8_t* rgb_data) {
     if (!recording) return;
 
     VideoRecorderImpl* v = static_cast<VideoRecorderImpl*>(impl);
 
-    if (!rgb_data.empty()) {
-        if (rgb_data.size() != static_cast<size_t>(width * height * 3)) return;
-
+    if (rgb_data) {
         // Convert RGB24 to YUV420P
-        const uint8_t* inData[1] = { rgb_data.data() };
+        const uint8_t* inData[1] = { rgb_data };
         int inLinesize[1] = { 3 * width };
         sws_scale(v->sws_ctx, inData, inLinesize, 0, height, v->frame->data, v->frame->linesize);
 
@@ -206,7 +208,7 @@ void VideoRecorder::writeFrame(const std::vector<uint8_t>& rgb_data) {
     }
 
     // Encode
-    int ret = avcodec_send_frame(v->codec_ctx, rgb_data.empty() ? NULL : v->frame);
+    int ret = avcodec_send_frame(v->codec_ctx, rgb_data == nullptr ? NULL : v->frame);
     if (ret < 0) return;
 
     while (ret >= 0) {
