@@ -16,16 +16,16 @@ IconInfo icons[] = {
     {"RotateCCW", "\xee\x90\x99"},
     {"RotateCW", "\xee\x90\x9a"},
     {"Record", "\xee\x81\xa1"},
-    {"Stop", "\xee\x80\x87"},
+    {"Stop", "\xee\x99\x87"}, // Use 'square' instead of 'stop' to get a filled square
     {"ZoomIn", "\xee\xa3\xbf"},
     {"ZoomOut", "\xee\xa4\x80"}
 };
 
-void export_icon(SDL_Renderer* renderer, TTF_Font* font, const IconInfo& icon, int size, std::ofstream& out) {
+void export_icon(TTF_Font* font, const IconInfo& icon, int size, std::ofstream& out) {
     SDL_Color white = {255, 255, 255, 255};
     SDL_Surface* surface = TTF_RenderUTF8_Blended(font, icon.codepoint, white);
     if (!surface) {
-        std::cerr << "Failed to render icon: " << icon.name << " at size " << size << std::endl;
+        std::cerr << "Failed to render icon: " << icon.name << " at size " << size << " Error: " << TTF_GetError() << std::endl;
         return;
     }
 
@@ -43,37 +43,43 @@ void export_icon(SDL_Renderer* renderer, TTF_Font* font, const IconInfo& icon, i
     SDL_FreeSurface(surface);
 }
 
-int main() {
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) return 1;
-    if (TTF_Init() == -1) return 1;
-
-    SDL_Window* window = SDL_CreateWindow("IconGen", 0, 0, 100, 100, SDL_WINDOW_HIDDEN);
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 0);
+int main(int argc, char* argv[]) {
+    std::cout << "Starting IconGen (No-SDL version)..." << std::endl;
+    if (TTF_Init() == -1) {
+        std::cerr << "TTF_Init Error: " << TTF_GetError() << std::endl;
+        return 1;
+    }
 
     const char* fontPath = "MaterialIcons-Regular.ttf";
     
-    std::ofstream out("src/Icons.hpp");
+    std::cout << "Writing to Icons_new.hpp..." << std::endl;
+    std::ofstream out("Icons_new.hpp");
+    if (!out.is_open()) {
+        std::cerr << "Failed to open Icons_new.hpp for writing" << std::endl;
+        return 1;
+    }
     out << "#ifndef ICONS_HPP" << std::endl;
     out << "#define ICONS_HPP" << std::endl << std::endl;
 
     int sizes[] = {24, 48};
     for (int size : sizes) {
+        std::cout << "Loading font " << fontPath << " at size " << size << "..." << std::endl;
         TTF_Font* font = TTF_OpenFont(fontPath, size);
         if (!font) {
-            std::cerr << "Failed to load font at size " << size << std::endl;
+            std::cerr << "Failed to load font at size " << size << ": " << TTF_GetError() << std::endl;
             continue;
         }
         for (const auto& icon : icons) {
-            export_icon(renderer, font, icon, size, out);
+            std::cout << "Exporting icon: " << icon.name << " (" << size << ")..." << std::endl;
+            export_icon(font, icon, size, out);
         }
         TTF_CloseFont(font);
     }
 
     out << "#endif" << std::endl;
+    out.close();
 
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
+    std::cout << "Done." << std::endl;
     TTF_Quit();
-    SDL_Quit();
     return 0;
 }

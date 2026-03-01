@@ -16,15 +16,18 @@ public:
 
     bool init();
 
-    void pollEvents(bool &running, bool &recordToggleRequested);
+    void pollEvents(bool &running, bool &recordToggleRequested, bool isRecording);
 
     void updateFrame(const std::vector<uint8_t> &rgb_data, const std::vector<uint16_t> &thermal_data, int w, int h);
 
     void render(bool isRecording, bool indicatorVisible, bool isConnected, const HotSpotResult &hotSpot = {});
 
     void setRotation(int degrees); // 0, 90, 180, 270
+    int getRotation() const { return rotation; }
     void setScale(float scale);
     float getScale() const;
+    TTF_Font* getFont() const { return font; }
+    TTF_Font* getRecordingFont() const { return recordingFont; }
 
 private:
     std::string title;
@@ -48,6 +51,7 @@ private:
     SDL_Renderer *renderer = nullptr;
     SDL_Texture *texture = nullptr;
     TTF_Font *font = nullptr;
+    TTF_Font *recordingFont = nullptr;
     SDL_Cursor *crosshairCursor = nullptr;
     SDL_Cursor *defaultCursor = nullptr;
 

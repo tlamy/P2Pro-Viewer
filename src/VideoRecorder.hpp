@@ -13,6 +13,7 @@ public:
     bool start(int width, int height, double fps);
     void stop();
     void writeFrame(const std::vector<uint8_t>& rgb_data);
+    void writeFrame(const uint8_t* rgb_data);
 
     bool isRecording() const { return recording; }
     std::string getFilename() const { return filename; }

@@ -83,6 +83,10 @@ public:
 private:
     std::unique_ptr<USBAdapter> adapter;
 
+    bool is_swapped = false;
+    int swap_vote = 0;
+    int frames_since_connect = 0;
+
     bool check_camera_ready();
     bool block_until_camera_ready(int timeout_ms = 5000);
 

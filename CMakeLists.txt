@@ -1,22 +1,70 @@
 cmake_minimum_required(VERSION 3.10)
+
+# Handle vcpkg toolchain BEFORE project() - setting it after project() has no effect
+if(NOT CMAKE_TOOLCHAIN_FILE)
+    if(DEFINED ENV{VCPKG_ROOT})
+        set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+    elseif(EXISTS "C:/vcpkg_root/scripts/buildsystems/vcpkg.cmake")
+        set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg_root/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+    else()
+        # Fall back to VS-bundled vcpkg (any edition/year)
+        file(GLOB _vs_vcpkg
+            "C:/Program Files/Microsoft Visual Studio/*/VC/vcpkg/scripts/buildsystems/vcpkg.cmake"
+            "C:/Program Files (x86)/Microsoft Visual Studio/*/VC/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        )
+        if(_vs_vcpkg)
+            list(GET _vs_vcpkg 0 _vs_vcpkg_first)
+            set(CMAKE_TOOLCHAIN_FILE "${_vs_vcpkg_first}" CACHE STRING "")
+        endif()
+    endif()
+endif()
+
 project(P2ProViewer)
 
 set(CMAKE_CXX_STANDARD 17)
 
-find_package(SDL2 REQUIRED)
-find_package(SDL2_ttf REQUIRED)
-
-# Try pkg-config for libusb and ffmpeg
-find_package(PkgConfig REQUIRED)
-if(PKG_CONFIG_FOUND)
-    if(NOT APPLE)
-        pkg_check_modules(LIBUSB libusb-1.0)
-        pkg_check_modules(FFMPEG REQUIRED libavcodec libavformat libswscale libavutil)
-    endif()
-    pkg_check_modules(SDL2_TTF SDL2_ttf)
+if(WIN32 AND NOT DEFINED USE_FFMPEG)
+    set(USE_FFMPEG OFF CACHE BOOL "Use FFmpeg for video recording")
+else()
+    option(USE_FFMPEG "Use FFmpeg for video recording" ON)
 endif()
 
-if(NOT APPLE)
+find_package(SDL2 CONFIG REQUIRED)
+find_package(SDL2_ttf CONFIG REQUIRED)
+    
+set(SDL2_LIBRARIES SDL2::SDL2 SDL2::SDL2main)
+set(SDL2_TTF_LIBRARIES SDL2_ttf::SDL2_ttf)
+
+# Try pkg-config for libusb and ffmpeg
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+    if(NOT APPLE AND NOT WIN32)
+        pkg_check_modules(LIBUSB libusb-1.0)
+        if(USE_FFMPEG)
+            pkg_check_modules(FFMPEG REQUIRED libavcodec libavformat libswscale libavutil)
+        endif()
+    endif()
+    # pkg_check_modules(SDL2_TTF SDL2_ttf) # Commented out to avoid polluting SDL2_TTF variables
+endif()
+
+if(WIN32)
+    # On Windows with vcpkg, libusb-1.0 and ffmpeg are found via find_package or find_library
+    find_package(libusb-1.0 CONFIG)
+    if(TARGET libusb-1.0::usb-1.0)
+        set(LIBUSB_LIBRARIES libusb-1.0::usb-1.0)
+    else()
+        find_library(LIBUSB_LIBRARIES NAMES usb-1.0 libusb-1.0)
+        find_path(LIBUSB_INCLUDE_DIR NAMES libusb.h PATH_SUFFIXES libusb-1.0)
+        include_directories(${LIBUSB_INCLUDE_DIR})
+    endif()
+
+    if(USE_FFMPEG)
+        find_package(FFMPEG COMPONENTS avcodec avformat swscale avutil REQUIRED)
+        set(FFMPEG_LIBRARIES FFMPEG::avcodec FFMPEG::avformat FFMPEG::swscale FFMPEG::avutil)
+        add_definitions(-DUSE_FFMPEG)
+    endif()
+    
+elseif(NOT APPLE)
     if(NOT LIBUSB_FOUND)
         find_library(LIBUSB_LIBRARIES NAMES usb-1.0)
         find_path(LIBUSB_INCLUDE_DIR NAMES libusb.h PATH_SUFFIXES libusb-1.0)
@@ -25,13 +73,19 @@ if(NOT APPLE)
     endif()
 endif()
 
-if (NOT APPLE)
+if (NOT APPLE AND NOT WIN32)
     include_directories(${FFMPEG_INCLUDE_DIRS} ${LIBUSB_INCLUDE_DIR})
     link_directories(${FFMPEG_LIBRARY_DIRS} ${LIBUSB_LIBRARY_DIRS})
 endif()
 
+if(WIN32)
+    include_directories(${LIBUSB_INCLUDE_DIR})
+endif()
+
 include_directories(${SDL2_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS})
-link_directories(${SDL2_TTF_LIBRARY_DIRS})
+# link_directories is generally discouraged with modern CMake, 
+# but we keep it if it was used for something specific.
+# link_directories(${SDL2_TTF_LIBRARY_DIRS})
 
 if (APPLE)
     add_executable(P2ProViewer
@@ -50,6 +104,33 @@ if (APPLE)
             MACOSX_BUNDLE_ICON_FILE P2ProViewer.icns
     )
     set_source_files_properties(Resources/P2ProViewer.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+elseif(WIN32)
+    set(WIN32_SOURCES
+            src/main.cpp
+            src/P2Pro.cpp
+            src/CameraWindow.cpp
+            src/WindowsAdapter.cpp
+            src/MFVideoSource.cpp
+            src/ColorConversion.cpp
+            src/Scaler.cpp
+    )
+    if(USE_FFMPEG)
+        list(APPEND WIN32_SOURCES src/VideoRecorder_ffmpeg.cpp)
+    else()
+        list(APPEND WIN32_SOURCES src/VideoRecorder_win.cpp)
+    endif()
+
+    add_executable(P2ProViewer ${WIN32_SOURCES})
+    
+    target_link_libraries(P2ProViewer 
+        ${SDL2_LIBRARIES} 
+        ${SDL2_TTF_LIBRARIES} 
+        ${LIBUSB_LIBRARIES} 
+        mfplat mf mfreadwrite mfuuid shlwapi ws2_32
+    )
+    if(USE_FFMPEG)
+        target_link_libraries(P2ProViewer ${FFMPEG_LIBRARIES})
+    endif()
 else ()
     add_executable(P2ProViewer
             src/main.cpp
