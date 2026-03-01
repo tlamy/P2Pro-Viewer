@@ -35,17 +35,16 @@ find_package(SDL2_ttf CONFIG REQUIRED)
 set(SDL2_LIBRARIES SDL2::SDL2 SDL2::SDL2main)
 set(SDL2_TTF_LIBRARIES SDL2_ttf::SDL2_ttf)
 
-# Try pkg-config for libusb and ffmpeg
-find_package(PkgConfig QUIET)
-if(PKG_CONFIG_FOUND)
-    if(NOT APPLE AND NOT WIN32)
-        pkg_check_modules(LIBUSB libusb-1.0)
-        if(USE_FFMPEG)
-            pkg_check_modules(FFMPEG REQUIRED libavcodec libavformat libswscale libavutil)
+    # Try pkg-config for libusb and ffmpeg
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        if(NOT APPLE AND NOT WIN32)
+            pkg_check_modules(LIBUSB libusb-1.0)
+            if(USE_FFMPEG)
+                pkg_check_modules(FFMPEG REQUIRED libavcodec libavformat libswscale libavutil)
+            endif()
         endif()
     endif()
-    # pkg_check_modules(SDL2_TTF SDL2_ttf) # Commented out to avoid polluting SDL2_TTF variables
-endif()
 
 if(WIN32)
     # On Windows with vcpkg, libusb-1.0 and ffmpeg are found via find_package or find_library
@@ -144,18 +143,20 @@ else ()
     )
 endif ()
 
-if (APPLE)
+if(APPLE)
     # Prefer static linking for SDL2 and SDL2_ttf on macOS to make it more portable
     # We force the search for static libraries for these specific components
     set(ORIG_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
     set(CMAKE_FIND_LIBRARY_SUFFIXES .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
 
     # Use pkg-config to find static versions and their dependencies if possible
-    pkg_check_modules(SDL2_STATIC_PKG QUIET SDL2 STATIC IMPORTED_TARGET)
-    pkg_check_modules(SDL2_TTF_STATIC_PKG QUIET SDL2_ttf STATIC IMPORTED_TARGET)
+    # Note: We don't use IMPORTED_TARGET here to avoid issues with missing dependencies in the project environment
+    pkg_check_modules(SDL2_STATIC_PKG QUIET SDL2 STATIC)
+    pkg_check_modules(SDL2_TTF_STATIC_PKG QUIET SDL2_ttf STATIC)
 
-    if(TARGET PkgConfig::SDL2_TTF_STATIC_PKG)
-        target_link_libraries(P2ProViewer PkgConfig::SDL2_TTF_STATIC_PKG)
+    if(SDL2_TTF_STATIC_PKG_FOUND)
+        target_link_libraries(P2ProViewer ${SDL2_TTF_STATIC_PKG_LIBRARIES})
+        target_link_directories(P2ProViewer PRIVATE ${SDL2_TTF_STATIC_PKG_LIBRARY_DIRS})
     elseif(TARGET SDL2_ttf::SDL2_ttf-static)
         target_link_libraries(P2ProViewer SDL2_ttf::SDL2_ttf-static)
     else()
@@ -167,9 +168,10 @@ if (APPLE)
         endif()
     endif()
 
-    if(NOT TARGET PkgConfig::SDL2_TTF_STATIC_PKG)
-        if(TARGET PkgConfig::SDL2_STATIC_PKG)
-            target_link_libraries(P2ProViewer PkgConfig::SDL2_STATIC_PKG)
+    if(NOT SDL2_TTF_STATIC_PKG_FOUND)
+        if(SDL2_STATIC_PKG_FOUND)
+            target_link_libraries(P2ProViewer ${SDL2_STATIC_PKG_LIBRARIES})
+            target_link_directories(P2ProViewer PRIVATE ${SDL2_STATIC_PKG_LIBRARY_DIRS})
         elseif(TARGET SDL2::SDL2-static)
             target_link_libraries(P2ProViewer SDL2::SDL2-static)
         else()
@@ -191,6 +193,7 @@ if (APPLE)
     find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
     find_library(FORCEFEEDBACK_FRAMEWORK ForceFeedback)
     find_library(GAMECONTROLLER_FRAMEWORK GameController)
+    find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox)
     target_link_libraries(P2ProViewer
         ${METAL_FRAMEWORK}
         ${QUARTZCORE_FRAMEWORK}
@@ -200,30 +203,33 @@ if (APPLE)
         ${AUDIOUNIT_FRAMEWORK}
         ${FORCEFEEDBACK_FRAMEWORK}
         ${GAMECONTROLLER_FRAMEWORK}
-    )
-
-    # Link against required frameworks for SDL2 static
-    find_library(METAL_FRAMEWORK Metal)
-    find_library(QUARTZCORE_FRAMEWORK QuartzCore)
-    find_library(COCOA_FRAMEWORK Cocoa)
-    find_library(CARBON_FRAMEWORK Carbon)
-    find_library(COREAUDIO_FRAMEWORK CoreAudio)
-    find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
-    find_library(FORCEFEEDBACK_FRAMEWORK ForceFeedback)
-    find_library(GAMECONTROLLER_FRAMEWORK GameController)
-    target_link_libraries(P2ProViewer
-        ${METAL_FRAMEWORK}
-        ${QUARTZCORE_FRAMEWORK}
-        ${COCOA_FRAMEWORK}
-        ${CARBON_FRAMEWORK}
-        ${COREAUDIO_FRAMEWORK}
-        ${AUDIOUNIT_FRAMEWORK}
-        ${FORCEFEEDBACK_FRAMEWORK}
-        ${GAMECONTROLLER_FRAMEWORK}
+        ${AUDIOTOOLBOX_FRAMEWORK}
+        "-framework CoreHaptics"
+        "-lobjc"
     )
 
     # Restore original suffixes
     set(CMAKE_FIND_LIBRARY_SUFFIXES ${ORIG_CMAKE_FIND_LIBRARY_SUFFIXES})
+
+    # Add common library search paths for macOS (Homebrew)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L/opt/homebrew/lib -L/usr/local/lib")
+
+    # Find and link freetype and harfbuzz if we're linking SDL2_ttf statically
+    # These are needed because static libraries don't include their dependencies
+    find_library(FREETYPE_LIB NAMES libfreetype.dylib freetype HINTS /opt/homebrew/lib /usr/local/lib)
+    find_library(HARFBUZZ_LIB NAMES libharfbuzz.dylib harfbuzz HINTS /opt/homebrew/lib /usr/local/lib)
+    
+    if(FREETYPE_LIB)
+        target_link_libraries(P2ProViewer "${FREETYPE_LIB}")
+    else()
+        target_link_libraries(P2ProViewer freetype)
+    endif()
+    
+    if(HARFBUZZ_LIB)
+        target_link_libraries(P2ProViewer "${HARFBUZZ_LIB}")
+    else()
+        target_link_libraries(P2ProViewer harfbuzz)
+    endif()
 else()
     target_link_libraries(P2ProViewer ${SDL2_LIBRARIES} ${SDL2_TTF_LIBRARIES} ${LIBUSB_LIBRARIES} ${FFMPEG_LIBRARIES})
 endif()
