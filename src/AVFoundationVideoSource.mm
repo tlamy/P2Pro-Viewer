@@ -5,10 +5,12 @@
 #include <mutex>
 #include <vector>
 #include <iostream>
+#include <condition_variable>
 
 @interface P2ProCaptureDelegate : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate> {
     std::vector<uint8_t> latestFrame;
     std::mutex frameMutex;
+    std::condition_variable frameCond;
     BOOL hasNewFrame;
 }
 @property (nonatomic, strong) AVCaptureSession *session;
@@ -45,25 +47,30 @@
     // We expect YUYV (kCVPixelFormatType_422YpCbCr8) which is 2 bytes per pixel
     size_t expectedBytesPerRow = width * 2;
     
-    std::lock_guard<std::mutex> lock(frameMutex);
-    latestFrame.resize(width * height * 2);
-    
-    if (bytesPerRow == expectedBytesPerRow) {
-        memcpy(latestFrame.data(), baseAddress, width * height * 2);
-    } else {
-        for (size_t y = 0; y < height; ++y) {
-            memcpy(latestFrame.data() + y * expectedBytesPerRow, (uint8_t*)baseAddress + y * bytesPerRow, expectedBytesPerRow);
+    {
+        std::lock_guard<std::mutex> lock(frameMutex);
+        latestFrame.resize(width * height * 2);
+        
+        if (bytesPerRow == expectedBytesPerRow) {
+            memcpy(latestFrame.data(), baseAddress, width * height * 2);
+        } else {
+            for (size_t y = 0; y < height; ++y) {
+                memcpy(latestFrame.data() + y * expectedBytesPerRow, (uint8_t*)baseAddress + y * bytesPerRow, expectedBytesPerRow);
+            }
         }
+        
+        hasNewFrame = YES;
     }
-    
-    hasNewFrame = YES;
+    frameCond.notify_all();
     
     CVPixelBufferUnlockBaseAddress(imageBuffer, kCVPixelBufferLock_ReadOnly);
 }
 
 - (bool)getLatestFrame:(std::vector<uint8_t>&)frameData {
-    std::lock_guard<std::mutex> lock(frameMutex);
-    if (!hasNewFrame) return false;
+    std::unique_lock<std::mutex> lock(frameMutex);
+    if (!frameCond.wait_for(lock, std::chrono::milliseconds(500), [self] { return hasNewFrame == YES; })) {
+        return false;
+    }
     frameData = latestFrame;
     hasNewFrame = NO; 
     return true;

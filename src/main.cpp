@@ -259,8 +259,10 @@ int main(int argc, char *argv[]) {
             }
 
             P2ProFrame frame;
+            static int readFailCount = 0;
             if (cameraConnected) {
                 if (camera.get_frame(frame)) {
+                    readFailCount = 0;
                     hs = detectHotSpot(frame, hs.found);
                     tracker.update(hs, frame);
 
@@ -306,14 +308,18 @@ int main(int argc, char *argv[]) {
                         recorder.writeFrame(recordingBuffer.data());
                     }
                 } else {
-                    dprintf("Camera disconnected!\n");
-                    cameraConnected = false;
-                    camera.disconnect();
-                    if (recorder.isRecording()) {
-                        dprintf("Stopping recording due to disconnection.\n");
-                        recorder.stop();
+                    readFailCount++;
+                    if (readFailCount > 50) { // 50 attempts @ ~10ms = ~500ms
+                        dprintf("Camera disconnected!\n");
+                        cameraConnected = false;
+                        camera.disconnect();
+                        if (recorder.isRecording()) {
+                            dprintf("Stopping recording due to disconnection.\n");
+                            recorder.stop();
+                        }
+                        hs.found = false;
+                        readFailCount = 0;
                     }
-                    hs.found = false;
                 }
             }
 

@@ -34,7 +34,7 @@ bool MacOSAdapter::connect(uint16_t vid, uint16_t pid) {
 
     io_iterator_t iter;
     // kIOMasterPortDefault is deprecated but widely used. NULL is also acceptable.
-    kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault, matchingDict, &iter);
+    kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault, matchingDict, &iter);
     if (kr != KERN_SUCCESS) {
         dprintf("MacOSAdapter::connect() - Failed to get matching services.\n");
         return false;
