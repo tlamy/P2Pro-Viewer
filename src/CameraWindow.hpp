@@ -7,6 +7,7 @@
 #include <vector>
 #include "P2Pro.hpp"
 #include "Scaler.hpp"
+#include "ColorConversion.hpp"
 
 class CameraWindow {
 public:
@@ -26,6 +27,14 @@ public:
     int getRotation() const { return rotation; }
     void setScale(float scale);
     float getScale() const;
+
+    void setPalette(ColorConversion::PaletteType p);
+    ColorConversion::PaletteType getPalette() const { return palette; }
+    void setGamma(float g);
+    float getGamma() const { return gamma; }
+    void setDevMode(bool dev) { devMode = dev; }
+    bool isDevMode() const { return devMode; }
+
     TTF_Font* getFont() const { return font; }
     TTF_Font* getRecordingFont() const { return recordingFont; }
 
@@ -41,9 +50,15 @@ private:
     int mouseX = 0;
     int mouseY = 0;
     bool mouseOverRecordButton = false;
+    bool mouseOverPaletteButton = false;
+    bool mouseOverGammaUpButton = false;
+    bool mouseOverGammaDownButton = false;
+    bool mouseOverDevModeButton = false;
     bool showMouseTemp = false;
+    ColorConversion::PaletteType palette = ColorConversion::PaletteType::GREYSCALE;
+    float gamma = 1.0f;
+    bool devMode = false;
     std::vector<uint16_t> currentThermal;
-    bool darkOutline = true;
     bool isScanning = false;
     Scaler scaler;
 
@@ -67,6 +82,8 @@ private:
     IconTexture iconStop;
     IconTexture iconZoomIn;
     IconTexture iconZoomOut;
+    IconTexture iconArrowUp;
+    IconTexture iconArrowDown;
 
     bool isPointInCircle(int px, int py, int cx, int cy, int radius);
     void renderIndicator();

@@ -80,6 +80,12 @@ bool P2Pro::connect() {
 
 void P2Pro::disconnect() {
     adapter->disconnect();
+    frames_since_connect = 0;
+    swap_vote = 0;
+}
+
+bool P2Pro::is_connected() const {
+    return adapter->is_connected();
 }
 
 bool P2Pro::get_frame(P2ProFrame &out_frame) {

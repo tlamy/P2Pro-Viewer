@@ -6,6 +6,7 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <sys/stat.h>
 
 @interface MacOSVideoRecorder : NSObject
 @property (nonatomic, strong) AVAssetWriter *writer;
@@ -24,6 +25,26 @@ VideoRecorder::VideoRecorder() {
     impl = new VideoRecorderImpl();
     VideoRecorderImpl* v = static_cast<VideoRecorderImpl*>(impl);
     v->recorder = [[MacOSVideoRecorder alloc] init];
+
+    // Determine base directory: ~/Movies or ~ as fallback
+    NSArray *movieDirs = NSSearchPathForDirectoriesInDomains(NSMoviesDirectory, NSUserDomainMask, YES);
+    if ([movieDirs count] > 0) {
+        baseDir = [[movieDirs firstObject] UTF8String];
+    } else {
+        baseDir = [NSHomeDirectory() UTF8String];
+    }
+    
+    // Check if it exists, if not, fallback to home
+    struct stat st;
+    if (stat(baseDir.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) {
+        baseDir = [NSHomeDirectory() UTF8String];
+    }
+    
+    if (!baseDir.empty() && baseDir.back() != '/') {
+        baseDir += "/";
+    }
+    
+    dprintf("VideoRecorder::VideoRecorder() - Base directory: %s\n", baseDir.c_str());
 }
 
 VideoRecorder::~VideoRecorder() {
@@ -37,7 +58,7 @@ std::string VideoRecorder::generateFilename() const {
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
     std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".mp4";
+    oss << baseDir << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".mp4";
     return oss.str();
 }
 

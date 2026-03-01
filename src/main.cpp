@@ -2,87 +2,14 @@
 #include "CameraWindow.hpp"
 #include "VideoRecorder.hpp"
 #include "ColorConversion.hpp"
+#include "Preferences.hpp"
+#include "HotSpotTracker.hpp"
 #include <iostream>
 #include <thread>
 #include <chrono>
 #include <vector>
 #include <deque>
 #include <cmath>
-
-class HotSpotTracker {
-public:
-    struct Sample {
-        double x, y, temp;
-        uint8_t r, g, b;
-    };
-
-    void update(HotSpotResult &res, const P2ProFrame &frame) {
-        if (!res.found) {
-            lostFrames++;
-            // Persistence: if we recently had a hot spot, keep it for up to 3 frames
-            if (lostFrames <= 3 && !history.empty()) {
-                res.found = true;
-                applyHistory(res);
-            } else {
-                res.found = false;
-                if (lostFrames > 10) history.clear();
-            }
-            return;
-        }
-
-        lostFrames = 0;
-        Sample current = {(double) res.x, (double) res.y, res.tempC, res.r, res.g, res.b};
-
-        if (!history.empty()) {
-            double lastX = history.back().x;
-            double lastY = history.back().y;
-            double distSq = std::pow(current.x - lastX, 2) + std::pow(current.y - lastY, 2);
-
-            if (distSq > 20.0 * 20.0) {
-                // Threshold for "moving significantly"
-                history.clear();
-            }
-        }
-
-        history.push_back(current);
-        if (history.size() > 8) {
-            history.pop_front();
-        }
-
-        applyHistory(res);
-    }
-
-private:
-    std::deque<Sample> history;
-    int lostFrames = 0;
-
-    void applyHistory(HotSpotResult &res) {
-        if (history.empty()) return;
-
-        double avgX = 0, avgY = 0;
-        double maxTemp = -1000.0;
-        Sample bestSample = history.back();
-
-        for (const auto &s: history) {
-            avgX += s.x;
-            avgY += s.y;
-            if (s.temp > maxTemp) {
-                maxTemp = s.temp;
-                bestSample = s; // Use color and temp from the hottest sample
-            }
-        }
-
-        res.x = (int) std::round(avgX / history.size());
-        res.y = (int) std::round(avgY / history.size());
-        // Use max temperature from buffer as requested: "if any modification is done to temperature, it must use max, not average"
-        res.tempC = maxTemp;
-
-        // Use color from the hottest sample for better contrast consistency
-        res.r = bestSample.r;
-        res.g = bestSample.g;
-        res.b = bestSample.b;
-    }
-};
 
 HotSpotResult detectHotSpot(const P2ProFrame &frame, bool previouslyFound) {
     if (frame.thermal.empty()) return {};
@@ -115,14 +42,6 @@ HotSpotResult detectHotSpot(const P2ProFrame &frame, bool previouslyFound) {
     if ((double) maxVal - avgVal > threshold) {
         res.val = maxVal;
         res.tempC = (maxVal / 64.0) - 273.15;
-
-        // Extract color from RGB frame
-        if (frame.rgb.size() >= (size_t) (res.y * width + res.x) * 3 + 3) {
-            int idx = (res.y * width + res.x) * 3;
-            res.r = frame.rgb[idx];
-            res.g = frame.rgb[idx + 1];
-            res.b = frame.rgb[idx + 2];
-        }
     } else {
         res.found = false;
     }
@@ -132,40 +51,40 @@ HotSpotResult detectHotSpot(const P2ProFrame &frame, bool previouslyFound) {
 void annotateFrame(uint8_t* rgb, int width, int height, const HotSpotResult &res, TTF_Font* font) {
     if (!res.found) return;
 
-    uint8_t r = 255 - res.r;
-    uint8_t g = 255 - res.g;
-    uint8_t b = 255 - res.b;
+    // Use high-contrast colors: White with Black shadow
+    SDL_Color mainColor = { 255, 255, 255, 255 };
+    SDL_Color shadowColor = { 0, 0, 0, 255 };
 
-    // Simple crosshair drawing
+    // Simple crosshair drawing (White with Black shadow/outline)
     int crossSize = 10;
+    auto drawPixel = [&](int x, int y, uint8_t r, uint8_t g, uint8_t b) {
+        if (x >= 0 && x < width && y >= 0 && y < height) {
+            int idx = (y * width + x) * 3;
+            rgb[idx] = r;
+            rgb[idx + 1] = g;
+            rgb[idx + 2] = b;
+        }
+    };
+
+    // Draw shadow first (1px offset)
     for (int i = -crossSize; i <= crossSize; ++i) {
-        if (res.x + i >= 0 && res.x + i < width) {
-            int idx = (res.y * width + (res.x + i)) * 3;
-            rgb[idx] = r;
-            rgb[idx + 1] = g;
-            rgb[idx + 2] = b;
-        }
-        if (res.y + i >= 0 && res.y + i < height) {
-            int idx = ((res.y + i) * width + res.x) * 3;
-            rgb[idx] = r;
-            rgb[idx + 1] = g;
-            rgb[idx + 2] = b;
-        }
+        drawPixel(res.x + i + 1, res.y + 1, 0, 0, 0);
+        drawPixel(res.x + 1, res.y + i + 1, 0, 0, 0);
+    }
+    // Draw crosshair
+    for (int i = -crossSize; i <= crossSize; ++i) {
+        drawPixel(res.x + i, res.y, 255, 255, 255);
+        drawPixel(res.x, res.y + i, 255, 255, 255);
     }
 
     // Draw temperature text
     char text[32];
     snprintf(text, sizeof(text), "%.1f C", res.tempC);
     
-    // Contrast colors for shadow
-    SDL_Color mainColor = { r, g, b, 255 };
-    uint8_t bv = (res.r + res.g + res.b > 384) ? 0 : 255;
-    SDL_Color shadowColor = { bv, bv, bv, 255 };
-
     // Position text near crosshair, ensuring it stays within bounds
     int tx = res.x + 12;
     int ty = res.y - 12;
-    if (tx + 60 > width) tx = res.x - 65; // Extended for safety at larger scales
+    if (tx + 60 > width) tx = res.x - 65;
     if (ty < 15) ty = res.y + 20;
 
     if (font) {
@@ -175,6 +94,7 @@ void annotateFrame(uint8_t* rgb, int width, int height, const HotSpotResult &res
 
 int main(int argc, char *argv[]) {
     try {
+        Preferences& prefs = Preferences::getInstance();
         dprintf("Application Start\n");
         CameraWindow window("P2Pro Viewer", 256, 192); // Display only the pseudo color part initially
         dprintf("Initializing Window...\n");
@@ -258,24 +178,70 @@ int main(int argc, char *argv[]) {
                 }
             }
 
+            static float smoothedMin = 16384.0f;
+            static float smoothedMax = 0.0f;
+            static std::vector<uint8_t> customRgb;
+            static std::vector<uint8_t> devRgb;
+            customRgb.resize(256 * 192 * 3);
+
             P2ProFrame frame;
             static int readFailCount = 0;
             if (cameraConnected) {
+                if (!camera.is_connected()) {
+                    dprintf("Camera connection lost (USB/Video)!\n");
+                    cameraConnected = false;
+                    camera.disconnect();
+                    if (recorder.isRecording()) {
+                        dprintf("Stopping recording due to connection loss.\n");
+                        recorder.stop();
+                    }
+                    hs.found = false;
+                }
+            }
+
+            if (cameraConnected) {
                 if (camera.get_frame(frame)) {
                     readFailCount = 0;
+
+                    // Calculate min/max of thermal data
+                    uint16_t currentMin = 65535, currentMax = 0;
+                    for (uint16_t v : frame.thermal) {
+                        if (v < currentMin) currentMin = v;
+                        if (v > currentMax) currentMax = v;
+                    }
+
+                    // Smooth range over time
+                    float alpha = 0.1f; // Smoothing factor
+                    smoothedMin = smoothedMin * (1.0f - alpha) + (float)currentMin * alpha;
+                    smoothedMax = smoothedMax * (1.0f - alpha) + (float)currentMax * alpha;
+
+                    // Generate custom color image
+                    ColorConversion::applyPalette(frame.thermal.data(), customRgb.data(), 256, 192, 
+                                                 (uint16_t)smoothedMin, (uint16_t)smoothedMax, 
+                                                 window.getPalette(), window.getGamma());
+
                     hs = detectHotSpot(frame, hs.found);
                     tracker.update(hs, frame);
 
-                    // Update window with clean frame (overlay rendered separately)
-                    window.updateFrame(frame.rgb, frame.thermal, 256, 192);
+                    // Update window
+                    if (window.isDevMode()) {
+                        devRgb.resize(512 * 192 * 3);
+                        for (int y = 0; y < 192; ++y) {
+                            memcpy(devRgb.data() + (y * 512 + 0) * 3, frame.rgb.data() + (y * 256) * 3, 256 * 3);
+                            memcpy(devRgb.data() + (y * 512 + 256) * 3, customRgb.data() + (y * 256) * 3, 256 * 3);
+                        }
+                        window.updateFrame(devRgb, frame.thermal, 256, 192);
+                    } else {
+                        window.updateFrame(customRgb, frame.thermal, 256, 192);
+                    }
 
                     if (recorder.isRecording()) {
-                        const uint8_t* srcRgb = frame.rgb.data();
+                        const uint8_t* srcRgb = customRgb.data();
                         int srcW = 256;
                         int srcH = 192;
 
                         if (recRotation != 0) {
-                            ColorConversion::rotateRGB24(frame.rgb.data(), 256, 192, rotationBuffer.data(), recRotation);
+                            ColorConversion::rotateRGB24(customRgb.data(), 256, 192, rotationBuffer.data(), recRotation);
                             srcRgb = rotationBuffer.data();
                             if (recRotation == 90 || recRotation == 270) {
                                 std::swap(srcW, srcH);

@@ -99,6 +99,84 @@ void drawTTFText(uint8_t* rgb, int width, int height, int x, int y, const char* 
     renderToBuffer(text, color, 0, 0);
 }
 
+void applyPalette(const uint16_t* thermal, uint8_t* rgb, int width, int height, uint16_t minVal, uint16_t maxVal, PaletteType palette, float gamma) {
+    int count = width * height;
+    float range = (float)(maxVal - minVal);
+    if (range <= 0) range = 1.0f;
+
+    for (int i = 0; i < count; ++i) {
+        float norm = (float)(thermal[i] - minVal) / range;
+        norm = std::max(0.0f, std::min(1.0f, norm));
+
+        if (gamma != 1.0f) {
+            norm = std::pow(norm, gamma);
+        }
+
+        uint8_t r, g, b;
+        switch (palette) {
+            case PaletteType::GREYSCALE:
+                r = g = b = (uint8_t)(norm * 255.0f);
+                break;
+            case PaletteType::HOTNESS: {
+                // black - blue - red - yellow - white
+                if (norm < 0.25f) { // black to blue
+                    r = 0; g = 0; b = (uint8_t)(norm * 4.0f * 255.0f);
+                } else if (norm < 0.5f) { // blue to red
+                    r = (uint8_t)((norm - 0.25f) * 4.0f * 255.0f); g = 0; b = (uint8_t)(255 - (norm - 0.25f) * 4.0f * 255.0f);
+                } else if (norm < 0.75f) { // red to yellow
+                    r = 255; g = (uint8_t)((norm - 0.5f) * 4.0f * 255.0f); b = 0;
+                } else { // yellow to white
+                    r = 255; g = 255; b = (uint8_t)((norm - 0.75f) * 4.0f * 255.0f);
+                }
+                break;
+            }
+            case PaletteType::RAINBOW: {
+                // Rainbow (cold blue to hot red)
+                // We use hue from 240 (blue) down to 0 (red)
+                float h = (1.0f - norm) * 240.0f; 
+                float s = 1.0f, v = 1.0f;
+                float c = v * s;
+                float x = c * (1.0f - std::abs(std::fmod(h / 60.0f, 2.0f) - 1.0f));
+                float m = v - c;
+                float r_, g_, b_;
+                if (h < 60) { r_ = c; g_ = x; b_ = 0; }
+                else if (h < 120) { r_ = x; g_ = c; b_ = 0; }
+                else if (h < 180) { r_ = 0; g_ = c; b_ = x; }
+                else if (h < 240) { r_ = 0; g_ = x; b_ = c; }
+                else { r_ = c; g_ = 0; b_ = x; }
+                r = (uint8_t)((r_ + m) * 255.0f);
+                g = (uint8_t)((g_ + m) * 255.0f);
+                b = (uint8_t)((b_ + m) * 255.0f);
+                break;
+            }
+            case PaletteType::INVERSE_RAINBOW: {
+                // Inverse Rainbow (cold red to hot blue)
+                // We use hue from 0 (red) up to 240 (blue)
+                float h = norm * 240.0f;
+                float s = 1.0f, v = 1.0f;
+                float c = v * s;
+                float x = c * (1.0f - std::abs(std::fmod(h / 60.0f, 2.0f) - 1.0f));
+                float m = v - c;
+                float r_, g_, b_;
+                if (h < 60) { r_ = c; g_ = x; b_ = 0; }
+                else if (h < 120) { r_ = x; g_ = c; b_ = 0; }
+                else if (h < 180) { r_ = 0; g_ = c; b_ = x; }
+                else if (h < 240) { r_ = 0; g_ = x; b_ = c; }
+                else { r_ = c; g_ = 0; b_ = x; }
+                r = (uint8_t)((r_ + m) * 255.0f);
+                g = (uint8_t)((g_ + m) * 255.0f);
+                b = (uint8_t)((b_ + m) * 255.0f);
+                break;
+            }
+            default:
+                r = g = b = 0;
+        }
+        rgb[i * 3] = r;
+        rgb[i * 3 + 1] = g;
+        rgb[i * 3 + 2] = b;
+    }
+}
+
 void scaleRGB24(const uint8_t* src, int srcW, int srcH, uint8_t* dst, int dstW, int dstH) {
     if (!src || !dst) return;
     float xRatio = (float)srcW / (float)dstW;
@@ -148,6 +226,58 @@ void rotateRGB24(const uint8_t* src, int srcW, int srcH, uint8_t* dst, int rotat
             dstP[0] = srcP[0];
             dstP[1] = srcP[1];
             dstP[2] = srcP[2];
+        }
+    }
+}
+
+// Special case for side-by-side dev images (each 256x192)
+void rotateDevRGB24(const uint8_t* src, uint8_t* dst, int rotation) {
+    if (!src || !dst) return;
+    int rot = rotation % 360;
+    if (rot < 0) rot += 360;
+
+    if (rot == 0) {
+        memcpy(dst, src, 512 * 192 * 3);
+        return;
+    }
+
+    int dstW = (rot == 90 || rot == 270) ? 192 : 256;
+    int dstEffectiveW = dstW * 2;
+
+    // First half (Original)
+    std::vector<uint8_t> tmp(256 * 192 * 3);
+    for (int y = 0; y < 192; ++y) {
+        memcpy(tmp.data() + y * 256 * 3, src + (y * 512 + 0) * 3, 256 * 3);
+    }
+    
+    for (int y = 0; y < 192; ++y) {
+        for (int x = 0; x < 256; ++x) {
+            int nx, ny;
+            if (rot == 90) { nx = y; ny = 256 - 1 - x; }
+            else if (rot == 180) { nx = 256 - 1 - x; ny = 192 - 1 - y; }
+            else if (rot == 270) { nx = 192 - 1 - y; ny = x; }
+            else { nx = x; ny = y; }
+            const uint8_t* srcP = tmp.data() + (y * 256 + x) * 3;
+            uint8_t* dstP = dst + (ny * dstEffectiveW + nx) * 3;
+            dstP[0] = srcP[0]; dstP[1] = srcP[1]; dstP[2] = srcP[2];
+        }
+    }
+
+    // Second half (Custom)
+    for (int y = 0; y < 192; ++y) {
+        memcpy(tmp.data() + y * 256 * 3, src + (y * 512 + 256) * 3, 256 * 3);
+    }
+    
+    for (int y = 0; y < 192; ++y) {
+        for (int x = 0; x < 256; ++x) {
+            int nx, ny;
+            if (rot == 90) { nx = y; ny = 256 - 1 - x; }
+            else if (rot == 180) { nx = 256 - 1 - x; ny = 192 - 1 - y; }
+            else if (rot == 270) { nx = 192 - 1 - y; ny = x; }
+            else { nx = x; ny = y; }
+            const uint8_t* srcP = tmp.data() + (y * 256 + x) * 3;
+            uint8_t* dstP = dst + (ny * dstEffectiveW + (nx + dstW)) * 3;
+            dstP[0] = srcP[0]; dstP[1] = srcP[1]; dstP[2] = srcP[2];
         }
     }
 }

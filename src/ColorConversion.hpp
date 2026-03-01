@@ -19,11 +19,24 @@ namespace ColorConversion {
     // Draws text using SDL_ttf into an RGB buffer (24-bit)
     void drawTTFText(uint8_t* rgb, int width, int height, int x, int y, const char* text, TTF_Font* font, SDL_Color color, SDL_Color shadowColor);
 
+    // Color palettes for thermal data
+    enum class PaletteType {
+        GREYSCALE,
+        HOTNESS,
+        RAINBOW,
+        INVERSE_RAINBOW
+    };
+
+    void applyPalette(const uint16_t* thermal, uint8_t* rgb, int width, int height, uint16_t minVal, uint16_t maxVal, PaletteType palette, float gamma = 1.0f);
+
     // Simple nearest-neighbor scaling for RGB24
     void scaleRGB24(const uint8_t* src, int srcW, int srcH, uint8_t* dst, int dstW, int dstH);
 
     // Rotates RGB24 buffer (0, 90, 180, 270 degrees anti-clockwise)
     void rotateRGB24(const uint8_t* src, int srcW, int srcH, uint8_t* dst, int rotation);
+
+    // Special case for side-by-side dev images (each 256x192)
+    void rotateDevRGB24(const uint8_t* src, uint8_t* dst, int rotation);
 
     // Rotates Thermal buffer (0, 90, 180, 270 degrees anti-clockwise)
     void rotateThermal(const uint16_t* src, int srcW, int srcH, uint16_t* dst, int rotation);

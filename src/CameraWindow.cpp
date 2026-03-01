@@ -2,6 +2,7 @@
 #include "P2Pro.hpp"
 #include "Icons.hpp"
 #include "ColorConversion.hpp"
+#include "Preferences.hpp"
 #include <iostream>
 #include <cmath>
 
@@ -59,7 +60,33 @@ bool CameraWindow::init() {
     }
 
     dprintf("CameraWindow::init() - Creating window...\n");
-    window = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, baseWidth, baseHeight, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    Preferences& prefs = Preferences::getInstance();
+    
+    // Check if preferences need to be used
+    int winX = prefs.windowX == -1 ? SDL_WINDOWPOS_CENTERED : prefs.windowX;
+    int winY = prefs.windowY == -1 ? SDL_WINDOWPOS_CENTERED : prefs.windowY;
+    
+    // Use stored scale
+    currentScale = prefs.zoom;
+    rotation = prefs.rotation;
+    palette = prefs.paletteNameToEnum(prefs.colorPaletteName);
+    gamma = prefs.gamma;
+
+    // Update dimensions based on rotation and palette
+    int origW = 256;
+    int origH = 192;
+    if (rotation == 90 || rotation == 270) {
+        baseWidth = origH;
+        baseHeight = origW;
+    } else {
+        baseWidth = origW;
+        baseHeight = origH;
+    }
+    
+    currentWidth = (int)(baseWidth * currentScale);
+    currentHeight = (int)(baseHeight * currentScale);
+
+    window = SDL_CreateWindow(title.c_str(), winX, winY, currentWidth, currentHeight + toolbarHeight, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     if (!window) {
         dprintf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
         return false;
@@ -76,8 +103,6 @@ bool CameraWindow::init() {
     initIcons();
 
     // Set initial window size
-    currentWidth = (int)(baseWidth * currentScale);
-    currentHeight = (int)(baseHeight * currentScale);
     SDL_SetWindowSize(window, currentWidth, currentHeight + toolbarHeight);
 
     SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
@@ -105,11 +130,38 @@ void CameraWindow::setScale(float scale) {
     if (scale > 16.0f) scale = 16.0f;
     currentScale = scale;
 
-    currentWidth = (int)(baseWidth * currentScale);
-    currentHeight = (int)(baseHeight * currentScale);
+    Preferences& prefs = Preferences::getInstance();
+    prefs.zoom = currentScale;
+    prefs.save();
+
+    int origW = 256;
+    int origH = 192;
+    int curBaseW, curBaseH;
+    if (rotation == 90 || rotation == 270) {
+        curBaseW = origH; curBaseH = origW;
+    } else {
+        curBaseW = origW; curBaseH = origH;
+    }
+
+    int effectiveBaseWidth = devMode ? curBaseW * 2 : curBaseW;
+
+    // We must ensure the texture matches current devMode state
+    if (texture) {
+        int tw, th;
+        SDL_QueryTexture(texture, NULL, NULL, &tw, &th);
+        if (tw != effectiveBaseWidth || th != curBaseH) {
+            SDL_DestroyTexture(texture);
+            texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, effectiveBaseWidth, curBaseH);
+            scaler = Scaler(effectiveBaseWidth, curBaseH);
+        }
+    }
+
+    currentWidth = (int)(effectiveBaseWidth * currentScale);
+    currentHeight = (int)(curBaseH * currentScale);
 
     SDL_SetWindowSize(window, currentWidth, currentHeight + toolbarHeight);
     SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
+    SDL_SetWindowMinimumSize(window, (int)(effectiveBaseWidth * 0.5f), (int)(curBaseH * 0.5f) + toolbarHeight);
 }
 
 float CameraWindow::getScale() const {
@@ -118,6 +170,10 @@ float CameraWindow::getScale() const {
 
 void CameraWindow::setRotation(int degrees) {
     rotation = degrees % 360;
+
+    Preferences& prefs = Preferences::getInstance();
+    prefs.rotation = rotation;
+    prefs.save();
 
     // Update base dimensions based on rotation
     int origW = 256;
@@ -131,20 +187,38 @@ void CameraWindow::setRotation(int degrees) {
         baseHeight = origH;
     }
 
+    int effectiveBaseWidth = devMode ? baseWidth * 2 : baseWidth;
+
     // Recreate texture with new dimensions
     if (texture) SDL_DestroyTexture(texture);
-    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, baseWidth, baseHeight);
+    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, effectiveBaseWidth, baseHeight);
 
     // Update scaler
-    scaler = Scaler(baseWidth, baseHeight);
+    scaler = Scaler(effectiveBaseWidth, baseHeight);
 
     // Maintain current scale factor
-    currentWidth = (int) std::round(baseWidth * currentScale);
+    currentWidth = (int) std::round(effectiveBaseWidth * currentScale);
     currentHeight = (int) std::round(baseHeight * currentScale);
 
     SDL_SetWindowSize(window, currentWidth, currentHeight + toolbarHeight);
     SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
-    SDL_SetWindowMinimumSize(window, (int)(baseWidth * 0.5f), (int)(baseHeight * 0.5f) + toolbarHeight);
+    SDL_SetWindowMinimumSize(window, (int)(effectiveBaseWidth * 0.5f), (int)(baseHeight * 0.5f) + toolbarHeight);
+}
+
+void CameraWindow::setPalette(ColorConversion::PaletteType p) {
+    palette = p;
+    Preferences& prefs = Preferences::getInstance();
+    prefs.colorPaletteName = prefs.paletteEnumToName(palette);
+    prefs.save();
+}
+
+void CameraWindow::setGamma(float g) {
+    gamma = g;
+    if (gamma < 0.1f) gamma = 0.1f;
+    if (gamma > 5.0f) gamma = 5.0f;
+    Preferences& prefs = Preferences::getInstance();
+    prefs.gamma = gamma;
+    prefs.save();
 }
 
 void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested, bool isRecording) {
@@ -157,8 +231,14 @@ void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested, bool i
             mouseX = e.motion.x;
             mouseY = e.motion.y;
             
-            // Record button in toolbar is at x around 100
-            mouseOverRecordButton = (mouseY < toolbarHeight && mouseX > 80 && mouseX < 120);
+            // Icons centers: 25, 65, 100, 135, 175, 215. Each hit area approx 35-40px.
+            mouseOverRecordButton = (mouseY < toolbarHeight && mouseX >= 80 && mouseX < 120);
+            mouseOverPaletteButton = (mouseY < toolbarHeight && mouseX >= 280 && mouseX < 325);
+            // Gamma display starts at 345. Down arrow is at 332. Up arrow is at 345 + textW + 18.
+            // "G: X.X" is about 45-50px wide. 345 + 50 + 18 = 413.
+            mouseOverGammaDownButton = (mouseY < toolbarHeight && mouseX >= 315 && mouseX < 342);
+            mouseOverGammaUpButton = (mouseY < toolbarHeight && mouseX >= 400 && mouseX < 430);
+            mouseOverDevModeButton = (mouseY < toolbarHeight && mouseX >= 430 && mouseX < 475);
         } else if (e.type == SDL_MOUSEBUTTONDOWN) {
             if (e.button.button == SDL_BUTTON_LEFT) {
                 if (mouseY < toolbarHeight) {
@@ -178,15 +258,31 @@ void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested, bool i
                             float nextScale = currentScale;
                             if (currentScale > 1.0f) nextScale = std::floor(currentScale - 0.01f);
                             else if (currentScale > 0.5f) nextScale = 0.5f;
+                            else if (currentScale > 0.25f) nextScale = 0.25f;
+                            else if (currentScale > 0.125f) nextScale = 0.125f;
                             setScale(nextScale);
                         }
                     } else if (mouseX >= 195 && mouseX < 235) { // Zoom + (center 215)
                         if (!isRecording) {
                             float nextScale = currentScale;
-                            if (currentScale < 1.0f) nextScale = 1.0f;
+                            if (currentScale < 0.25f) nextScale = 0.25f;
+                            else if (currentScale < 0.5f) nextScale = 0.5f;
+                            else if (currentScale < 1.0f) nextScale = 1.0f;
                             else if (currentScale < 16.0f) nextScale = std::ceil(currentScale + 0.01f);
                             setScale(nextScale);
                         }
+                    } else if (mouseX >= 280 && mouseX < 325) { // Palette
+                        int nextPalette = (int)palette + 1;
+                        if (nextPalette > (int)ColorConversion::PaletteType::INVERSE_RAINBOW) nextPalette = 0;
+                        setPalette((ColorConversion::PaletteType)nextPalette);
+                    } else if (mouseX >= 315 && mouseX < 342) { // Gamma Down
+                        setGamma(gamma - 0.1f);
+                    } else if (mouseX >= 400 && mouseX < 430) { // Gamma Up
+                        setGamma(gamma + 0.1f);
+                    } else if (mouseX >= 430 && mouseX < 475) { // Dev Mode
+                        devMode = !devMode;
+                        // Trigger resize for side-by-side
+                        setScale(currentScale);
                     }
                 } else {
                     showMouseTemp = !showMouseTemp;
@@ -212,7 +308,18 @@ void CameraWindow::pollEvents(bool& running, bool& recordToggleRequested, bool i
                     currentHeight = targetH;
                     currentScale = (float)currentWidth / (float)baseWidth;
                     SDL_RenderSetLogicalSize(renderer, currentWidth, currentHeight + toolbarHeight);
+
+                    Preferences& prefs = Preferences::getInstance();
+                    prefs.zoom = currentScale;
+                    prefs.windowW = targetW;
+                    prefs.windowH = targetH + toolbarHeight;
+                    prefs.save();
                 }
+            } else if (e.window.event == SDL_WINDOWEVENT_MOVED) {
+                Preferences& prefs = Preferences::getInstance();
+                prefs.windowX = e.window.data1;
+                prefs.windowY = e.window.data2;
+                prefs.save();
             }
         }
     }
@@ -222,17 +329,22 @@ void CameraWindow::updateFrame(const std::vector<uint8_t> &rgb_data, const std::
                                int h) {
     if (rotation == 0) {
         if (w != 256 || h != 192) return;
-        SDL_UpdateTexture(texture, NULL, rgb_data.data(), w * 3);
+        int effectiveW = devMode ? w * 2 : w;
+        SDL_UpdateTexture(texture, NULL, rgb_data.data(), effectiveW * 3);
         currentThermal = thermal_data;
     } else {
-        // Rotate
-        std::vector<uint8_t> rotRGB(256 * 192 * 3);
-        std::vector<uint16_t> rotThermal(256 * 192);
+        int effectiveW = devMode ? w * 2 : w;
+        std::vector<uint8_t> rotRGB(effectiveW * h * 3);
+        std::vector<uint16_t> rotThermal(w * h);
+        
+        if (devMode) {
+            ColorConversion::rotateDevRGB24(rgb_data.data(), rotRGB.data(), rotation);
+        } else {
+            ColorConversion::rotateRGB24(rgb_data.data(), w, h, rotRGB.data(), rotation);
+        }
+        ColorConversion::rotateThermal(thermal_data.data(), w, h, rotThermal.data(), rotation);
 
-        ColorConversion::rotateRGB24(rgb_data.data(), 256, 192, rotRGB.data(), rotation);
-        ColorConversion::rotateThermal(thermal_data.data(), 256, 192, rotThermal.data(), rotation);
-
-        SDL_UpdateTexture(texture, NULL, rotRGB.data(), baseWidth * 3);
+        SDL_UpdateTexture(texture, NULL, rotRGB.data(), (devMode ? baseWidth * 2 : baseWidth) * 3);
         currentThermal = rotThermal;
     }
 }
@@ -295,6 +407,12 @@ void CameraWindow::initIcons() {
 
         iconZoomOut.texture = loadIconFromMemory(icon_ZoomOut_48, icon_ZoomOut_48_width, icon_ZoomOut_48_height, icon_ZoomOut_48_pitch);
         iconZoomOut.w = icon_ZoomOut_48_width / 2; iconZoomOut.h = icon_ZoomOut_48_height / 2;
+
+        iconArrowUp.texture = loadIconFromMemory(icon_ArrowUpward_48, icon_ArrowUpward_48_width, icon_ArrowUpward_48_height, icon_ArrowUpward_48_pitch);
+        iconArrowUp.w = icon_ArrowUpward_48_width / 2; iconArrowUp.h = icon_ArrowUpward_48_height / 2;
+
+        iconArrowDown.texture = loadIconFromMemory(icon_ArrowDownward_48, icon_ArrowDownward_48_width, icon_ArrowDownward_48_height, icon_ArrowDownward_48_pitch);
+        iconArrowDown.w = icon_ArrowDownward_48_width / 2; iconArrowDown.h = icon_ArrowDownward_48_height / 2;
     } else {
         iconCrosshair.texture = loadIconFromMemory(icon_Crosshair_24, icon_Crosshair_24_width, icon_Crosshair_24_height, icon_Crosshair_24_pitch);
         iconCrosshair.w = icon_Crosshair_24_width; iconCrosshair.h = icon_Crosshair_24_height;
@@ -316,6 +434,12 @@ void CameraWindow::initIcons() {
 
         iconZoomOut.texture = loadIconFromMemory(icon_ZoomOut_24, icon_ZoomOut_24_width, icon_ZoomOut_24_height, icon_ZoomOut_24_pitch);
         iconZoomOut.w = icon_ZoomOut_24_width; iconZoomOut.h = icon_ZoomOut_24_height;
+
+        iconArrowUp.texture = loadIconFromMemory(icon_ArrowUpward_24, icon_ArrowUpward_24_width, icon_ArrowUpward_24_height, icon_ArrowUpward_24_pitch);
+        iconArrowUp.w = icon_ArrowUpward_24_width; iconArrowUp.h = icon_ArrowUpward_24_height;
+
+        iconArrowDown.texture = loadIconFromMemory(icon_ArrowDownward_24, icon_ArrowDownward_24_width, icon_ArrowDownward_24_height, icon_ArrowDownward_24_pitch);
+        iconArrowDown.w = icon_ArrowDownward_24_width; iconArrowDown.h = icon_ArrowDownward_24_height;
     }
 }
 
@@ -335,6 +459,8 @@ void CameraWindow::cleanupIcons() {
     SDL_DestroyTexture(iconStop.texture);
     SDL_DestroyTexture(iconZoomIn.texture);
     SDL_DestroyTexture(iconZoomOut.texture);
+    SDL_DestroyTexture(iconArrowUp.texture);
+    SDL_DestroyTexture(iconArrowDown.texture);
     
     iconCrosshair.texture = nullptr;
     iconRotateCCW.texture = nullptr;
@@ -343,6 +469,8 @@ void CameraWindow::cleanupIcons() {
     iconStop.texture = nullptr;
     iconZoomIn.texture = nullptr;
     iconZoomOut.texture = nullptr;
+    iconArrowUp.texture = nullptr;
+    iconArrowDown.texture = nullptr;
 }
 
 void CameraWindow::renderToolbar(bool isRecording) {
@@ -381,11 +509,74 @@ void CameraWindow::renderToolbar(bool isRecording) {
     drawIcon(iconRotateCW, 135, false, isRecording);
     drawIcon(iconZoomOut, 175, false, isRecording);
     drawIcon(iconZoomIn, 215, false, isRecording);
+
+    // Palette button
+    if (font) {
+        const char* paletteNames[] = {"Grey", "Hot", "Rb1", "Rb2"};
+        const char* pName = paletteNames[(int)palette];
+        SDL_Color white = {200, 200, 200, 255};
+        if (mouseOverPaletteButton) white = {0, 255, 0, 255};
+        SDL_Surface* surface = TTF_RenderText_Blended(font, pName, white);
+        if (surface) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surface);
+            if (tex) {
+                SDL_Rect dest = { 280, toolbarHeight / 2 - surface->h / 2, surface->w, surface->h };
+                SDL_RenderCopy(renderer, tex, NULL, &dest);
+                SDL_DestroyTexture(tex);
+            }
+            SDL_FreeSurface(surface);
+        }
+    }
+
+    // Gamma button and arrows
+    if (font) {
+        char gammaText[32];
+        snprintf(gammaText, sizeof(gammaText), "G: %.1f", gamma);
+        SDL_Color white = {200, 200, 200, 255};
+        SDL_Surface* surface = TTF_RenderText_Blended(font, gammaText, white);
+        if (surface) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surface);
+            if (tex) {
+                SDL_Rect dest = { 345, toolbarHeight / 2 - surface->h / 2, surface->w, surface->h };
+                SDL_RenderCopy(renderer, tex, NULL, &dest);
+                SDL_DestroyTexture(tex);
+                
+                // Arrows next to gamma text
+                // Down arrow (left of text)
+                drawIcon(iconArrowDown, 332, mouseOverGammaDownButton);
+                // Up arrow (right of text)
+                drawIcon(iconArrowUp, 345 + surface->w + 18, mouseOverGammaUpButton);
+            }
+            SDL_FreeSurface(surface);
+        }
+    }
+
+    // DevMode button
+    if (font) {
+        SDL_Color white = devMode ? (SDL_Color){0, 255, 0, 255} : (SDL_Color){200, 200, 200, 255};
+        if (mouseOverDevModeButton) white = {0, 255, 255, 255};
+        SDL_Surface* surface = TTF_RenderText_Blended(font, "DEV", white);
+        if (surface) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surface);
+            if (tex) {
+                SDL_Rect dest = { 430, toolbarHeight / 2 - surface->h / 2, surface->w, surface->h };
+                SDL_RenderCopy(renderer, tex, NULL, &dest);
+                SDL_DestroyTexture(tex);
+            }
+            SDL_FreeSurface(surface);
+        }
+    }
     
     // Render current scale text
     if (font) {
-        char scaleText[16];
-        snprintf(scaleText, sizeof(scaleText), "%.0f%%", currentScale * 100.0f);
+        char scaleText[32];
+        if (std::abs(currentScale - 1.0f) < 0.01f) {
+            snprintf(scaleText, sizeof(scaleText), "1");
+        } else if (currentScale > 1.0f) {
+            snprintf(scaleText, sizeof(scaleText), "x%.0f", std::round(currentScale));
+        } else {
+            snprintf(scaleText, sizeof(scaleText), "÷%.0f", std::round(1.0f / currentScale));
+        }
         SDL_Color white = {200, 200, 200, 255};
         SDL_Surface* surface = TTF_RenderText_Blended(font, scaleText, white);
         if (surface) {
@@ -419,16 +610,26 @@ void CameraWindow::renderMouseTemp() {
 
     if (mouseY < toolbarHeight) return;
 
-    // Scale from logical size to base dimensions
-    float invScaleX = (float) baseWidth / (float) currentWidth;
-    float invScaleY = (float) baseHeight / (float) currentHeight;
+    int sensorW = (rotation == 90 || rotation == 270) ? 192 : 256;
+    int sensorH = (rotation == 90 || rotation == 270) ? 256 : 192;
 
-    int tx = (int) (mouseX * invScaleX);
-    int ty = (int) ((mouseY - toolbarHeight) * invScaleY);
+    // Scale from logical size to sensor dimensions
+    float scale = (float) currentHeight / (float) sensorH;
 
-    if (tx < 0 || tx >= baseWidth || ty < 0 || ty >= baseHeight) return;
+    int tx = (int) (mouseX / scale);
+    int ty = (int) ((mouseY - toolbarHeight) / scale);
 
-    uint16_t val = currentThermal[ty * baseWidth + tx];
+    if (devMode) {
+        // Left half is original, right half is custom.
+        // Both represent the same sensor area.
+        if (tx >= sensorW) {
+            tx -= sensorW;
+        }
+    }
+
+    if (tx < 0 || tx >= sensorW || ty < 0 || ty >= sensorH) return;
+
+    uint16_t val = currentThermal[ty * sensorW + tx];
     double tempC = (val / 64.0) - 273.15;
 
     char text[32];
@@ -496,23 +697,39 @@ void CameraWindow::renderHotSpot(const HotSpotResult& hotSpot) {
     }
 
     // Scale from base dimensions (rotated) to current logical size
-    float scaleX = (float) currentWidth / (float) baseWidth;
-    float scaleY = (float) currentHeight / (float) baseHeight;
+    // In devMode, baseWidth is 2 * sensorWidth, and currentWidth is baseWidth * scale.
+    // We want the hotspot on the custom colorized image (right half).
+    
+    int sensorW = (rotation == 90 || rotation == 270) ? 192 : 256;
+    int sensorH = (rotation == 90 || rotation == 270) ? 256 : 192;
 
-    int x = (int) (rx * scaleX);
-    int y = (int) (ry * scaleY) + toolbarHeight;
+    float scale = (float) currentHeight / (float) sensorH;
+
+    int x = (int) (rx * scale);
+    int y = (int) (ry * scale) + toolbarHeight;
+
+    // Hot-spot should work on the new custom-colorized image always.
+    // In devMode, we show hotspot on the right half (custom color).
+    // In normal mode, we only show custom color, so we don't need to offset.
+    if (devMode) {
+        x += (int)(sensorW * scale);
+    }
 
     // Safety check to avoid rendering outside the window/toolbar
     if (x < 0 || x >= currentWidth || y < toolbarHeight || y >= currentHeight + toolbarHeight) return;
 
-    // Inverse color
-    uint8_t invR = 255 - hotSpot.r;
-    uint8_t invG = 255 - hotSpot.g;
-    uint8_t invB = 255 - hotSpot.b;
+    // Use high-contrast colors: White with Black shadow/outline
+    SDL_Color textColor = {255, 255, 255, 255};
+    SDL_Color outlineColor = {0, 0, 0, 255};
     
-    // Draw Crosshair (Inverse Color)
-    SDL_SetRenderDrawColor(renderer, invR, invG, invB, 255);
+    // Draw Crosshair Shadow
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     int crossSize = 12;
+    SDL_RenderDrawLine(renderer, x - crossSize + 1, y + 1, x + crossSize + 1, y + 1);
+    SDL_RenderDrawLine(renderer, x + 1, y - crossSize + 1, x + 1, y + crossSize + 1);
+
+    // Draw Crosshair (White)
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     SDL_RenderDrawLine(renderer, x - crossSize, y, x + crossSize, y);
     SDL_RenderDrawLine(renderer, x, y - crossSize, x, y + crossSize);
 
@@ -520,17 +737,6 @@ void CameraWindow::renderHotSpot(const HotSpotResult& hotSpot) {
     if (!font) return;
     char text[32];
     snprintf(text, sizeof(text), "%.1f C", hotSpot.tempC);
-
-    // Contrast outline (hysteresis to prevent flickering)
-    int brightness = hotSpot.r + hotSpot.g + hotSpot.b;
-    if (darkOutline) {
-        if (brightness < 300) darkOutline = false;
-    } else {
-        if (brightness > 450) darkOutline = true;
-    }
-    
-    SDL_Color outlineColor = darkOutline ? SDL_Color{0, 0, 0, 255} : SDL_Color{255, 255, 255, 255};
-    SDL_Color textColor = {invR, invG, invB, 255};
 
     // Render shadow/outline first
     SDL_Surface* shadowSurface = TTF_RenderText_Blended(font, text, outlineColor);
