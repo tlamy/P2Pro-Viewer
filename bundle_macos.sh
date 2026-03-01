@@ -63,6 +63,10 @@ cat <<EOF > "$TARGET.app/Contents/Info.plist"
     <string>APPL</string>
     <key>CFBundleSignature</key>
     <string>????</string>
+    <key>CFBundleShortVersionString</key>
+    <string>${APP_VERSION:-0.0.0}</string>
+    <key>CFBundleVersion</key>
+    <string>${APP_VERSION:-0.0.0}</string>
 </dict>
 </plist>
 EOF
