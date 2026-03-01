@@ -301,6 +301,11 @@ if(WIN32)
     set(CPACK_WIX_PRODUCT_ICON "${CMAKE_SOURCE_DIR}/Resources/P2ProViewer.ico")
     set(CPACK_WIX_UI_REF "WixUI_InstallDir")
     set(CPACK_WIX_PROPERTY_ARPURLINFOABOUT "https://github.com/tlamy/P2Pro-Viewer")
+    
+    # Custom installation directory without version suffix
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "P2ProViewer")
+    # Add Start Menu shortcut
+    set(CPACK_PACKAGE_EXECUTABLES "P2ProViewer" "P2ProViewer")
 elseif(NOT APPLE)
     set(CPACK_GENERATOR "DEB")
 endif()
