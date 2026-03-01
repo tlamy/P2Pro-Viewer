@@ -1,0 +1,198 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            build-essential \
+            libsdl2-dev \
+            libsdl2-ttf-dev \
+            libusb-1.0-0-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libswscale-dev \
+            libavutil-dev
+
+      - name: Configure and Build
+        run: |
+          mkdir build
+          cd build
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            BUILD_TYPE="Release"
+          else
+            BUILD_TYPE="Debug"
+          fi
+          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+          make -j$(nproc)
+
+      - name: Package with CPack
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          cd build
+          cpack -G DEB
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: build/*.deb
+          if-no-files-found: ignore
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install sdl2 sdl2_ttf pkg-config dylibbundler create-dmg
+
+      - name: Configure and Build
+        run: |
+          mkdir build
+          cd build
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            BUILD_TYPE="Release"
+          else
+            BUILD_TYPE="Debug"
+          fi
+          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Create App Bundle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          chmod +x bundle_macos.sh
+          BUILD_DIR="build" ./bundle_macos.sh
+
+      - name: Create DMG
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p dist
+          create-dmg \
+            --volname "P2ProViewer" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "P2ProViewer.app" 200 190 \
+            --hide-extension "P2ProViewer.app" \
+            --app-drop-link 600 185 \
+            "dist/P2ProViewer.dmg" \
+            "P2ProViewer.app"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/*.dmg
+          if-no-files-found: ignore
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          if ("${{ github.ref }}" -eq "refs/heads/main") {
+            $build_type = "Release"
+          } else {
+            $build_type = "Debug"
+          }
+          cmake -S . -B build `
+            -DCMAKE_BUILD_TYPE=$build_type `
+            -DUSE_FFMPEG=OFF `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build
+        run: |
+          if ("${{ github.ref }}" -eq "refs/heads/main") {
+            $config = "Release"
+          } else {
+            $config = "Debug"
+          }
+          cmake --build build --config $config --parallel
+
+      - name: Package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          $dist = "dist/P2ProViewer-Windows"
+          New-Item -ItemType Directory -Force -Path $dist
+          Copy-Item "build/Release/P2ProViewer.exe" $dist
+          Copy-Item "build/Release/*.dll" $dist -ErrorAction SilentlyContinue
+          Compress-Archive -Path $dist -DestinationPath "dist/P2ProViewer-windows.zip"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: dist/P2ProViewer-windows.zip
+          if-no-files-found: ignore
+
+  release:
+    name: Release
+    needs: [build-linux, build-macos, build-windows]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Linux Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-deb
+          path: dist
+
+      - name: Download macOS Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-zip
+          path: dist
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install semantic-release dependencies
+        run: npm install
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
