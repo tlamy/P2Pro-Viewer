@@ -185,7 +185,7 @@ jobs:
           }
           cmake --build build --config $config --parallel
 
-      - name: Package
+      - name: Package (zip)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
@@ -195,11 +195,31 @@ jobs:
           Copy-Item "build/Release/*.dll" $dist -ErrorAction SilentlyContinue
           Compress-Archive -Path $dist -DestinationPath "dist/P2ProViewer-windows.zip"
 
-      - name: Upload Artifact
+      - name: Package (MSI)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
+            choco install wixtoolset -y --no-progress
+            $env:PATH += ";$env:ProgramFiles\WiX Toolset v3.14\bin"
+          }
+          New-Item -ItemType Directory -Force -Path dist
+          cd build
+          cpack -G WIX -C Release
+          Move-Item *.msi ../dist/
+
+      - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-zip
           path: dist/P2ProViewer-windows.zip
+          if-no-files-found: ignore
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi
+          path: dist/*.msi
           if-no-files-found: ignore
 
   release:
@@ -225,10 +245,16 @@ jobs:
           name: macos-dmg
           path: dist
 
-      - name: Download Windows Artifacts
+      - name: Download Windows zip artifact
         uses: actions/download-artifact@v4
         with:
           name: windows-zip
+          path: dist
+
+      - name: Download Windows MSI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-msi
           path: dist
 
       - name: Setup Node.js
