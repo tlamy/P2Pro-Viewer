@@ -57,6 +57,7 @@ jobs:
           sudo apt-get install -y \
             cmake \
             build-essential \
+            ccache \
             libsdl2-dev \
             libsdl2-ttf-dev \
             libusb-1.0-0-dev \
@@ -64,6 +65,13 @@ jobs:
             libavformat-dev \
             libswscale-dev \
             libavutil-dev
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ runner.os }}-${{ github.ref_name }}
+          restore-keys: |
+            ${{ runner.os }}-
 
       - name: Configure and Build
         run: |
@@ -74,7 +82,7 @@ jobs:
           else
             BUILD_TYPE="Debug"
           fi
-          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DAPP_VERSION=${{ needs.determine-version.outputs.version }}
+          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DAPP_VERSION=${{ needs.determine-version.outputs.version }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           make -j$(nproc)
 
       - name: Package with CPack
@@ -100,7 +108,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install sdl2 sdl2_ttf pkg-config dylibbundler create-dmg
+          brew install sdl2 sdl2_ttf pkg-config dylibbundler create-dmg ccache
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ runner.os }}-${{ github.ref_name }}
+          restore-keys: |
+            ${{ runner.os }}-
 
       - name: Configure and Build
         run: |
@@ -111,7 +126,7 @@ jobs:
           else
             BUILD_TYPE="Debug"
           fi
-          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DAPP_VERSION=${{ needs.determine-version.outputs.version }}
+          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DAPP_VERSION=${{ needs.determine-version.outputs.version }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           make -j$(sysctl -n hw.ncpu)
 
       - name: Create App Bundle
@@ -150,6 +165,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Restore vcpkg and ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.VCPKG_INSTALLATION_ROOT }}/installed
+            ~/.cache/ccache
+            ${{ env.LOCALAPPDATA }}/ccache
+          key: ${{ runner.os }}-vcpkg-ccache-${{ hashFiles('vcpkg.json') }}-${{ github.ref_name }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-ccache-${{ hashFiles('vcpkg.json') }}-
+            ${{ runner.os }}-vcpkg-ccache-
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ runner.os }}-${{ github.ref_name }}
+          restore-keys: |
+            ${{ runner.os }}-
+
       - name: Convert icon to .ico
         run: magick "Resources/icon.png" -define icon:auto-resize=256,128,64,48,32,16 "Resources/P2ProViewer.ico"
 
@@ -174,6 +208,8 @@ jobs:
             -DAPP_VERSION="${{ needs.determine-version.outputs.version }}" `
             -DUSE_FFMPEG=OFF `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build
