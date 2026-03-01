@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/tlamy/P2Pro-Viewer/compare/v1.1.0...v1.1.1) (2026-03-01)
+
+
+### Bug Fixes
+
+* add Windows MSI installer via CPack WIX, bundle DLLs ([0834ead](https://github.com/tlamy/P2Pro-Viewer/commit/0834ead1443c420953f0a90d290837257a4314a6))
+
 # [1.1.0](https://github.com/tlamy/P2Pro-Viewer/compare/v1.0.0...v1.1.0) (2026-03-01)
 
 
