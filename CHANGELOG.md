@@ -1,3 +1,11 @@
+# [1.1.0](https://github.com/tlamy/P2Pro-Viewer/compare/v1.0.0...v1.1.0) (2026-03-01)
+
+
+### Features
+
+* add development GitHub Actions CI workflow and improve macOS and video handling ([1bdad80](https://github.com/tlamy/P2Pro-Viewer/commit/1bdad80908f722abdb203fbdab5ed3ec9ced1536))
+* add Windows support and improve cross-platform compatibility ([bb95ed0](https://github.com/tlamy/P2Pro-Viewer/commit/bb95ed0b887befe867888d29b3fa9e0f30303de2))
+
 # 1.0.0 (2026-01-15)
 
 
