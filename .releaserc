@@ -8,6 +8,7 @@
       "assets": [
         {"path": "dist/*.deb", "label": "Linux Debian/Ubuntu Package"},
         {"path": "dist/*.dmg", "label": "macOS Disk Image"},
+        {"path": "dist/*.msi", "label": "Windows Installer (.msi)"},
         {"path": "dist/P2ProViewer-windows.zip", "label": "Windows Portable (.zip)"}
       ]
     }],
