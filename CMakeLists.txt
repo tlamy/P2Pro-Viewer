@@ -215,6 +215,9 @@ if(APPLE)
 
     # Add common library search paths for macOS (Homebrew)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L/opt/homebrew/lib -L/usr/local/lib")
+    include_directories(/opt/homebrew/include /usr/local/include)
+    # SDL2_ttf headers are sometimes in SDL2/SDL_ttf.h under the include dir
+    include_directories(/opt/homebrew/include/SDL2 /usr/local/include/SDL2)
 
     # Find and link freetype and harfbuzz if we're linking SDL2_ttf statically
     # These are needed because static libraries don't include their dependencies
