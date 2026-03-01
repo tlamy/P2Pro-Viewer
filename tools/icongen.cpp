@@ -18,7 +18,9 @@ IconInfo icons[] = {
     {"Record", "\xee\x81\xa1"},
     {"Stop", "\xee\x99\x87"}, // Use 'square' instead of 'stop' to get a filled square
     {"ZoomIn", "\xee\xa3\xbf"},
-    {"ZoomOut", "\xee\xa4\x80"}
+    {"ZoomOut", "\xee\xa4\x80"},
+    {"ArrowUpward", "\xee\x97\x98"},
+    {"ArrowDownward", "\xee\x97\x9b"}
 };
 
 void export_icon(TTF_Font* font, const IconInfo& icon, int size, std::ofstream& out) {

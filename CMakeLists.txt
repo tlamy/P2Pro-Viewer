@@ -102,7 +102,9 @@ if (APPLE)
     add_executable(P2ProViewer
             src/main.cpp
             src/P2Pro.cpp
+            src/HotSpotTracker.cpp
             src/CameraWindow.cpp
+            src/Preferences.cpp
             src/MacOSAdapter.cpp
             src/AVFoundationVideoSource.mm
             src/VideoRecorder_mac.mm
@@ -110,6 +112,9 @@ if (APPLE)
             src/Scaler.cpp
             Resources/P2ProViewer.icns
     )
+
+    add_executable(icongen tools/icongen.cpp)
+    target_link_libraries(icongen ${SDL2_LIBRARIES} ${SDL2_TTF_LIBRARIES})
     set_target_properties(P2ProViewer PROPERTIES
             MACOSX_BUNDLE TRUE
             MACOSX_BUNDLE_ICON_FILE P2ProViewer.icns
@@ -121,14 +126,16 @@ elseif(WIN32)
     set(WIN32_SOURCES
             src/main.cpp
             src/P2Pro.cpp
+            src/HotSpotTracker.cpp
             src/CameraWindow.cpp
+            src/Preferences.cpp
             src/WindowsAdapter.cpp
             src/MFVideoSource.cpp
             src/ColorConversion.cpp
             src/Scaler.cpp
     )
     if(USE_FFMPEG)
-        list(APPEND WIN32_SOURCES src/VideoRecorder_ffmpeg.cpp)
+        list(APPEND WIN32_SOURCES src/VideoRecorder_linux.cpp)
     else()
         list(APPEND WIN32_SOURCES src/VideoRecorder_win.cpp)
     endif()
@@ -155,8 +162,10 @@ else ()
     add_executable(P2ProViewer
             src/main.cpp
             src/P2Pro.cpp
+            src/HotSpotTracker.cpp
             src/CameraWindow.cpp
-            src/VideoRecorder_ffmpeg.cpp
+            src/Preferences.cpp
+            src/VideoRecorder_linux.cpp
             src/LinuxAdapter.cpp
             src/V4L2VideoSource.cpp
             src/ColorConversion.cpp

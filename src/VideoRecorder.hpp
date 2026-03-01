@@ -17,10 +17,12 @@ public:
 
     bool isRecording() const { return recording; }
     std::string getFilename() const { return filename; }
+    std::string getBaseDir() const { return baseDir; }
 
 private:
     bool recording = false;
     std::string filename;
+    std::string baseDir;
     int width = 0;
     int height = 0;
     double fps = 0;

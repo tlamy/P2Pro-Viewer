@@ -66,6 +66,7 @@ public:
 
     bool connect();
     void disconnect();
+    bool is_connected() const;
 
     bool get_frame(P2ProFrame& frame);
 

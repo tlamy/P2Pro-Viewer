@@ -7,6 +7,7 @@
 #include <mfidl.h>
 #include <mfreadwrite.h>
 #include <shlwapi.h>
+#include <shlobj.h>
 #include <ctime>
 #include <iomanip>
 #include <sstream>
@@ -34,6 +35,31 @@ template <class T> void SafeRelease(T **ppT) {
 VideoRecorder::VideoRecorder() {
     MFStartup(MF_VERSION);
     impl = new VideoRecorderImpl();
+
+    PWSTR path = NULL;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Videos, 0, NULL, &path))) {
+        int len = WideCharToMultiByte(CP_UTF8, 0, path, -1, NULL, 0, NULL, NULL);
+        if (len > 0) {
+            std::vector<char> buf(len);
+            WideCharToMultiByte(CP_UTF8, 0, path, -1, buf.data(), len, NULL, NULL);
+            baseDir = buf.data();
+        }
+        CoTaskMemFree(path);
+    } else if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Profile, 0, NULL, &path))) {
+        int len = WideCharToMultiByte(CP_UTF8, 0, path, -1, NULL, 0, NULL, NULL);
+        if (len > 0) {
+            std::vector<char> buf(len);
+            WideCharToMultiByte(CP_UTF8, 0, path, -1, buf.data(), len, NULL, NULL);
+            baseDir = buf.data();
+        }
+        CoTaskMemFree(path);
+    }
+
+    if (!baseDir.empty() && baseDir.back() != '\\' && baseDir.back() != '/') {
+        baseDir += "\\";
+    }
+
+    dprintf("VideoRecorder::VideoRecorder() - Base directory: %s\n", baseDir.c_str());
 }
 
 VideoRecorder::~VideoRecorder() {
@@ -46,7 +72,7 @@ std::string VideoRecorder::generateFilename() const {
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
     std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".mp4";
+    oss << baseDir << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".mp4";
     return oss.str();
 }
 

@@ -4,6 +4,9 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <fstream>
+#include <sys/stat.h>
+#include <cstdlib>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -23,6 +26,61 @@ struct VideoRecorderImpl {
 
 VideoRecorder::VideoRecorder() {
     impl = new VideoRecorderImpl();
+
+    const char* home = std::getenv("HOME");
+    std::string h = home ? home : ".";
+
+    // Try XDG_VIDEOS_DIR from ~/.config/user-dirs.dirs
+    std::string xdgVideos;
+    std::string configHome;
+    const char* xdgConfigHome = std::getenv("XDG_CONFIG_HOME");
+    if (xdgConfigHome) {
+        configHome = xdgConfigHome;
+    } else if (home) {
+        configHome = h + "/.config";
+    }
+
+    if (!configHome.empty()) {
+        std::string userDirsFile = configHome + "/user-dirs.dirs";
+        std::ifstream file(userDirsFile);
+        if (file.is_open()) {
+            std::string line;
+            while (std::getline(file, line)) {
+                if (line.find("XDG_VIDEOS_DIR=") == 0) {
+                    size_t start = line.find('\"');
+                    size_t end = line.find_last_of('\"');
+                    if (start != std::string::npos && end != std::string::npos && end > start) {
+                        xdgVideos = line.substr(start + 1, end - start - 1);
+                        // Handle $HOME prefix
+                        if (xdgVideos.find("$HOME") == 0) {
+                            xdgVideos.replace(0, 5, h);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!xdgVideos.empty()) {
+        baseDir = xdgVideos;
+    } else if (home) {
+        std::string movies = h + "/Movies";
+        struct stat st;
+        if (stat(movies.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+            baseDir = movies;
+        } else {
+            baseDir = h;
+        }
+    } else {
+        baseDir = ".";
+    }
+
+    if (!baseDir.empty() && baseDir.back() != '/') {
+        baseDir += "/";
+    }
+
+    dprintf("VideoRecorder::VideoRecorder() - Base directory: %s\n", baseDir.c_str());
 }
 
 VideoRecorder::~VideoRecorder() {
@@ -34,7 +92,7 @@ std::string VideoRecorder::generateFilename() const {
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
     std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".mp4";
+    oss << baseDir << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".mp4";
     return oss.str();
 }
 

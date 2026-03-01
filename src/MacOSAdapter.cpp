@@ -112,7 +112,10 @@ bool MacOSAdapter::control_transfer(uint8_t request_type, uint8_t request, uint1
 }
 
 bool MacOSAdapter::is_connected() const {
-    return device_interface != nullptr;
+    // If we have a USB device, but it's no longer responding to simple requests, or video died
+    if (!device_interface) return false;
+    if (!native_cap.isOpened()) return false;
+    return true;
 }
 
 bool MacOSAdapter::open_video() {
@@ -139,9 +142,17 @@ bool MacOSAdapter::open_video() {
         }
     }
 
-    // 2. Fallback to index-based native search
+    // 2. Fallback to index-based search ONLY for devices with P2Pro-like names
     for (int i = 0; i < (int)devices.size(); ++i) {
-        dprintf("MacOSAdapter::open_video() - Probing native index %d (%s)...\n", i, devices[i].c_str());
+        const std::string& name = devices[i];
+        if (name.find("USB") == std::string::npos && 
+            name.find("UVC") == std::string::npos && 
+            name.find("Camera") == std::string::npos &&
+            name.find("Kamera") == std::string::npos) {
+            continue; // Skip FaceTime, iPhone, etc.
+        }
+
+        dprintf("MacOSAdapter::open_video() - Probing candidate index %d (%s)...\n", i, name.c_str());
         if (native_cap.open(i, 256, 384, 25)) {
             // Check if we can get a frame (verification)
             std::this_thread::sleep_for(std::chrono::milliseconds(200));

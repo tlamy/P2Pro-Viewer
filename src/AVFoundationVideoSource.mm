@@ -20,6 +20,7 @@
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection;
 - (bool)getLatestFrame:(std::vector<uint8_t>&)frameData;
+- (BOOL)checkConnected;
 @end
 
 @implementation P2ProCaptureDelegate
@@ -74,6 +75,12 @@
     frameData = latestFrame;
     hasNewFrame = NO; 
     return true;
+}
+
+- (BOOL)checkConnected {
+    if (!_isOpened || !_session) return NO;
+    if (!_session.isRunning && _isOpened) return NO;
+    return YES;
 }
 
 @end
@@ -142,6 +149,7 @@ bool AVFoundationVideoSource::openByName(const std::string& name, int width, int
         [delegate.session addInput:delegate.input];
     } else {
         dprintf("AVFoundationVideoSource::openByName() - Could not add input to session.\n");
+        [delegate.session commitConfiguration];
         return false;
     }
     
@@ -157,6 +165,7 @@ bool AVFoundationVideoSource::openByName(const std::string& name, int width, int
         [delegate.session addOutput:delegate.output];
     } else {
         dprintf("AVFoundationVideoSource::openByName() - Could not add output to session.\n");
+        [delegate.session commitConfiguration];
         return false;
     }
     
@@ -179,14 +188,20 @@ bool AVFoundationVideoSource::openByName(const std::string& name, int width, int
     
     if (bestFormat) {
         if ([targetDevice lockForConfiguration:&error]) {
-            targetDevice.activeFormat = bestFormat;
-            targetDevice.activeVideoMinFrameDuration = CMTimeMake(1, fps);
-            targetDevice.activeVideoMaxFrameDuration = CMTimeMake(1, fps);
+            [targetDevice setActiveFormat:bestFormat];
+            [targetDevice setActiveVideoMinFrameDuration:CMTimeMake(1, fps)];
+            [targetDevice setActiveVideoMaxFrameDuration:CMTimeMake(1, fps)];
             [targetDevice unlockForConfiguration];
             dprintf("AVFoundationVideoSource::openByName() - Set format to %dx%d @ %d FPS\n", width, height, fps);
+        } else {
+            dprintf("AVFoundationVideoSource::openByName() - Error locking device for configuration: %s\n", [[error localizedDescription] UTF8String]);
+            [delegate.session commitConfiguration];
+            return false;
         }
     } else {
-        dprintf("AVFoundationVideoSource::openByName() - Warning: Could not find exact format %dx%d @ %d FPS. Using default.\n", width, height, fps);
+        dprintf("AVFoundationVideoSource::openByName() - Error: Could not find exact format %dx%d @ %d FPS. Aborting open.\n", width, height, fps);
+        [delegate.session commitConfiguration];
+        return false;
     }
     
     [delegate.session commitConfiguration];
@@ -199,7 +214,9 @@ bool AVFoundationVideoSource::openByName(const std::string& name, int width, int
 void AVFoundationVideoSource::close() {
     P2ProCaptureDelegate* delegate = (__bridge P2ProCaptureDelegate*)impl;
     if (delegate.session) {
-        [delegate.session stopRunning];
+        if (delegate.session.isRunning) {
+            [delegate.session stopRunning];
+        }
         delegate.session = nil;
         delegate.input = nil;
         delegate.output = nil;
@@ -209,7 +226,7 @@ void AVFoundationVideoSource::close() {
 
 bool AVFoundationVideoSource::isOpened() const {
     P2ProCaptureDelegate* delegate = (__bridge P2ProCaptureDelegate*)impl;
-    return delegate.isOpened;
+    return [delegate checkConnected];
 }
 
 bool AVFoundationVideoSource::getFrame(std::vector<uint8_t>& frameData) {
