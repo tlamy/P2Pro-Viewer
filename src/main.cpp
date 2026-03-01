@@ -170,8 +170,6 @@ void annotateFrame(uint8_t* rgb, int width, int height, const HotSpotResult &res
 
     if (font) {
         ColorConversion::drawTTFText(rgb, width, height, tx, ty, text, font, mainColor, shadowColor);
-    } else {
-        ColorConversion::drawText(rgb, width, height, tx, ty, text, r, g, b, bv, bv, bv);
     }
 }
 

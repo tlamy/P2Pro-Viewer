@@ -16,12 +16,6 @@ namespace ColorConversion {
     // Converts RGB to BGR and flips vertically
     void RGBtoBGRFlipped(const uint8_t* rgb, uint8_t* bgr, int width, int height);
 
-    // Draws a simple 5x7 bitmap character into an RGB buffer (24-bit)
-    void drawChar(uint8_t* rgb, int width, int height, int x, int y, char c, uint8_t r, uint8_t g, uint8_t b, uint8_t br, uint8_t bg, uint8_t bb);
-
-    // Draws a string using drawChar
-    void drawText(uint8_t* rgb, int width, int height, int x, int y, const char* text, uint8_t r, uint8_t g, uint8_t b, uint8_t br, uint8_t bg, uint8_t bb);
-
     // Draws text using SDL_ttf into an RGB buffer (24-bit)
     void drawTTFText(uint8_t* rgb, int width, int height, int x, int y, const char* text, TTF_Font* font, SDL_Color color, SDL_Color shadowColor);
 
