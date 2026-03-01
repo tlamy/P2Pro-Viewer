@@ -113,6 +113,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Initialize vcpkg
+        shell: pwsh
+        run: |
+          cd $env:VCPKG_INSTALLATION_ROOT
+          git fetch --unshallow --tags
+          git checkout master
+          git pull
+
       - name: Configure
         shell: pwsh
         run: |
