@@ -117,7 +117,10 @@ if (APPLE)
     target_link_libraries(icongen ${SDL2_LIBRARIES} ${SDL2_TTF_LIBRARIES})
     set_target_properties(P2ProViewer PROPERTIES
             MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Info.plist.in"
             MACOSX_BUNDLE_ICON_FILE P2ProViewer.icns
+            MACOSX_BUNDLE_GUI_IDENTIFIER "de.macwake.p2proviewer"
+            MACOSX_BUNDLE_BUNDLE_NAME "P2ProViewer"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${APP_VERSION}"
             MACOSX_BUNDLE_BUNDLE_VERSION "${APP_VERSION}"
     )

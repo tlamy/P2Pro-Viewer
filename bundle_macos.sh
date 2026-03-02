@@ -67,6 +67,8 @@ cat <<EOF > "$TARGET.app/Contents/Info.plist"
     <string>${APP_VERSION:-0.0.0}</string>
     <key>CFBundleVersion</key>
     <string>${APP_VERSION:-0.0.0}</string>
+    <key>NSCameraUsageDescription</key>
+    <string>The app needs camera access to display the thermal video from the P2 Pro thermal imaging device.</string>
 </dict>
 </plist>
 EOF
