@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/tlamy/P2Pro-Viewer/compare/v1.2.0...v1.2.1) (2026-03-02)
+
+
+### Bug Fixes
+
+* **macos:** allow camera usage ([7c7db2b](https://github.com/tlamy/P2Pro-Viewer/commit/7c7db2b64c94488a89853791f0b0159d78697d52))
+
 # [1.2.0](https://github.com/tlamy/P2Pro-Viewer/compare/v1.1.1...v1.2.0) (2026-03-01)
 
 
