@@ -50,6 +50,11 @@ bool V4L2VideoSource::open(const std::string &device, int w, int h) {
         return false;
     }
 
+    if (fmt.fmt.pix.width != (uint32_t) w || fmt.fmt.pix.height != (uint32_t) h) {
+        close();
+        return false;
+    }
+
     width = fmt.fmt.pix.width;
     height = fmt.fmt.pix.height;
 

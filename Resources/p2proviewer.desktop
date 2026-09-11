@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=P2Pro Viewer
+Comment=Thermal imaging viewer for the P2Pro camera
+Exec=P2ProViewer
+Icon=p2proviewer
+Terminal=false
+Categories=Utility;Graphics;
+Keywords=thermal;camera;infrared;p2pro;
+StartupNotify=true

@@ -328,6 +328,7 @@ elseif(NOT APPLE)
     install(TARGETS P2ProViewer DESTINATION bin)
     install(FILES 60-p2pro.rules DESTINATION lib/udev/rules.d)
     install(FILES Resources/icon.png DESTINATION share/pixmaps RENAME p2proviewer.png)
+    install(FILES Resources/p2proviewer.desktop DESTINATION share/applications)
 endif()
 
 include(CPack)

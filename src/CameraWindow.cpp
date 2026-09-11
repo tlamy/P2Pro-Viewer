@@ -1,6 +1,7 @@
 #include "CameraWindow.hpp"
 #include "P2Pro.hpp"
 #include "Icons.hpp"
+#include "AppIcon.hpp"
 #include "ColorConversion.hpp"
 #include "Preferences.hpp"
 #include <iostream>
@@ -97,6 +98,16 @@ bool CameraWindow::init() {
     if (!renderer) {
         dprintf("Renderer could not be created! SDL_Error: %s\n", SDL_GetError());
         return false;
+    }
+
+    // Set the window/app icon (needed for the Linux window bar and taskbar)
+    SDL_Surface* icon = SDL_CreateRGBSurfaceWithFormatFrom((void*)APP_ICON_RGBA,
+        APP_ICON_WIDTH, APP_ICON_HEIGHT, 32, APP_ICON_PITCH, SDL_PIXELFORMAT_RGBA32);
+    if (icon) {
+        SDL_SetWindowIcon(window, icon);
+        SDL_FreeSurface(icon);
+    } else {
+        dprintf("Could not create window icon surface: %s\n", SDL_GetError());
     }
 
     // Initialize icons

@@ -82,7 +82,7 @@ bool LinuxAdapter::open_video() {
             for (int attempt = 0; attempt < 10; ++attempt) {
                 std::vector<uint8_t> dummy;
                 if (v4l2_cap.getFrame(dummy)) {
-                    if (dummy.size() >= 256 * 384 * 2) {
+                    if (dummy.size() == 256 * 384 * 2) {
                         got_frame = true;
                         break;
                     }
