@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/tlamy/P2Pro-Viewer/compare/v1.2.1...v1.2.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* Linux fixes (app icon, camera usb adapter) ([cd9329d](https://github.com/tlamy/P2Pro-Viewer/commit/cd9329d27bcc3fe2591bec5047436c0f3247c0e9))
+
 ## [1.2.1](https://github.com/tlamy/P2Pro-Viewer/compare/v1.2.0...v1.2.1) (2026-03-02)
 
 
