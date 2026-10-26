@@ -1,0 +1,30 @@
+name: Main
+
+# Push to main: compile on the cheapest platform only, then create the release
+# tag if the commits since the last tag warrant one. No release build happens
+# here -- the tag push starts release.yml.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    uses: ./.forgejo/workflows/build-base.yml
+    with:
+      app_version: ''
+      linux: 'ON'
+      macos: 'OFF'
+      upload_artifacts: false
+    secrets: inherit
+
+  tag:
+    needs: build
+    # Creates the tag with a personal access token so the tag push starts
+    # release.yml (automatic-token pushes do not trigger workflows).
+    uses: tools/ci/.forgejo/workflows/tag.yml@v1
+    with:
+      app_name: P2Pro Viewer
+      # There is no package-lock.json in this repository, so `npm ci` cannot
+      # run; the release tooling is installed from package.json instead.
+      install_command: npm install
+    secrets: inherit

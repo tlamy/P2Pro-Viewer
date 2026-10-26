@@ -1,211 +1,75 @@
-name: Build and Release
+name: Build Windows
 
+# Windows only: the Linux, macOS and release pipelines live in
+# `.forgejo/workflows/` and run on the Forgejo instance, which is where releases
+# are published now. This workflow stays on GitHub for the one platform Forgejo
+# has no runner for -- the MSI needs vcpkg and WiX on a Windows host.
 on:
+  workflow_dispatch:
   push:
-    branches:
-      - '**'
-    tags:
-      - 'v*'
-  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'CHANGELOG.md'
 
 jobs:
-  determine-version:
-    name: Determine Version
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get_version.outputs.version }}
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-
-      - name: Install semantic-release dependencies
-        run: npm install
-
-      - name: Get next version
-        id: get_version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Determine version
+        id: version
+        shell: pwsh
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            DRY=$(npx semantic-release --dry-run 2>&1 || true)
-            VERSION=$(echo "$DRY" | grep -oP '(?<=The next release version is )[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-          fi
-          if [ -z "$VERSION" ]; then
-            VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Determined version: $VERSION"
-
-  build-linux:
-    name: Build Linux
-    needs: [determine-version]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            build-essential \
-            ccache \
-            libsdl2-dev \
-            libsdl2-ttf-dev \
-            libusb-1.0-0-dev \
-            libavcodec-dev \
-            libavformat-dev \
-            libswscale-dev \
-            libavutil-dev
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ runner.os }}-${{ github.ref_name }}
-          restore-keys: |
-            ${{ runner.os }}-
-
-      - name: Configure and Build
-        run: |
-          mkdir build
-          cd build
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            BUILD_TYPE="Release"
-          else
-            BUILD_TYPE="Debug"
-          fi
-          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DAPP_VERSION=${{ needs.determine-version.outputs.version }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          make -j$(nproc)
-
-      - name: Package with CPack
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          cd build
-          cpack -G DEB
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-deb
-          path: build/*.deb
-          if-no-files-found: ignore
-
-  build-macos:
-    name: Build macOS
-    needs: [determine-version]
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          brew install sdl2 sdl2_ttf pkg-config dylibbundler create-dmg ccache
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ runner.os }}-${{ github.ref_name }}
-          restore-keys: |
-            ${{ runner.os }}-
-
-      - name: Configure and Build
-        run: |
-          mkdir build
-          cd build
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            BUILD_TYPE="Release"
-          else
-            BUILD_TYPE="Debug"
-          fi
-          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DAPP_VERSION=${{ needs.determine-version.outputs.version }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          make -j$(sysctl -n hw.ncpu)
-
-      - name: Create App Bundle
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          chmod +x bundle_macos.sh
-          BUILD_DIR="build" APP_VERSION="${{ needs.determine-version.outputs.version }}" ./bundle_macos.sh
-
-      - name: Create DMG
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          mkdir -p dist
-          create-dmg \
-            --volname "P2ProViewer" \
-            --window-pos 200 120 \
-            --window-size 800 400 \
-            --icon-size 100 \
-            --icon "P2ProViewer.app" 200 190 \
-            --hide-extension "P2ProViewer.app" \
-            --app-drop-link 600 185 \
-            "dist/P2ProViewer.dmg" \
-            "P2ProViewer.app"
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-dmg
-          path: dist/*.dmg
-          if-no-files-found: ignore
-
-  build-windows:
-    name: Build Windows
-    needs: [determine-version]
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+          $tag = git describe --tags --abbrev=0 2>$null
+          $version = if ($tag) { $tag -replace '^v', '' } else { '0.0.0' }
+          echo "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Restore vcpkg and ccache
         uses: actions/cache@v4
         with:
           path: |
-            ${{ env.VCPKG_INSTALLATION_ROOT }}/installed
-            ~/.cache/ccache
-            ${{ env.LOCALAPPDATA }}/ccache
-          key: ${{ runner.os }}-vcpkg-ccache-${{ hashFiles('vcpkg.json') }}-${{ github.ref_name }}
+            ${{ github.workspace }}/vcpkg
+            ${{ github.workspace }}/.ccache
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-vcpkg-ccache-${{ hashFiles('vcpkg.json') }}-
-            ${{ runner.os }}-vcpkg-ccache-
+            ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}-
+            ${{ runner.os }}-vcpkg-
 
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ runner.os }}-${{ github.ref_name }}
-          restore-keys: |
-            ${{ runner.os }}-
 
       - name: Convert icon to .ico
-        run: magick "Resources/icon.png" -define icon:auto-resize=256,128,64,48,32,16 "Resources/P2ProViewer.ico"
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "Resources/P2ProViewer.ico")) {
+            # The .ico is generated from the PNG with ImageMagick, which the
+            # windows-latest image ships.
+            magick Resources/icon.png -define icon:auto-resize=256,128,64,48,32,16 Resources/P2ProViewer.ico
+          }
 
       - name: Initialize vcpkg
         shell: pwsh
         run: |
-          cd $env:VCPKG_INSTALLATION_ROOT
-          git fetch --unshallow --tags
+          if (-not (Test-Path "vcpkg")) {
+            git clone https://github.com/microsoft/vcpkg.git
+          }
+          cd vcpkg
           git checkout master
           git pull
 
       - name: Configure
         shell: pwsh
         run: |
-          if ("${{ github.ref }}" -eq "refs/heads/main") {
-            $build_type = "Release"
-          } else {
-            $build_type = "Debug"
-          }
           cmake -S . -B build `
-            -DCMAKE_BUILD_TYPE=$build_type `
-            -DAPP_VERSION="${{ needs.determine-version.outputs.version }}" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DAPP_VERSION="${{ steps.version.outputs.version }}" `
             -DUSE_FFMPEG=OFF `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
             -DCMAKE_C_COMPILER_LAUNCHER=ccache `
@@ -213,16 +77,10 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build
-        run: |
-          if ("${{ github.ref }}" -eq "refs/heads/main") {
-            $config = "Release"
-          } else {
-            $config = "Debug"
-          }
-          cmake --build build --config $config --parallel
+        run: cmake --build build --config Release --parallel
 
       - name: Package (zip)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           $dist = "dist/P2ProViewer-Windows"
@@ -232,7 +90,7 @@ jobs:
           Compress-Archive -Path $dist -DestinationPath "dist/P2ProViewer-windows.zip"
 
       - name: Package (MSI)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
@@ -244,64 +102,12 @@ jobs:
           cpack -G WIX -C Release
           Move-Item *.msi ../dist/
 
-      - name: Upload zip artifact
+      - name: Upload artifacts
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: windows-zip
-          path: dist/P2ProViewer-windows.zip
-          if-no-files-found: ignore
-
-      - name: Upload MSI artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-msi
-          path: dist/*.msi
-          if-no-files-found: ignore
-
-  release:
-    name: Release
-    needs: [build-linux, build-macos, build-windows]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download Linux Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-deb
-          path: dist
-
-      - name: Download macOS Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-dmg
-          path: dist
-
-      - name: Download Windows zip artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-zip
-          path: dist
-
-      - name: Download Windows MSI artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-msi
-          path: dist
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-
-      - name: Install semantic-release dependencies
-        run: npm install
-
-      - name: Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+          name: windows
+          path: |
+            dist/P2ProViewer-windows.zip
+            dist/*.msi
+          if-no-files-found: error
