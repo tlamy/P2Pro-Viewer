@@ -16,5 +16,6 @@ jobs:
     uses: ./.forgejo/workflows/build-base.yml
     with:
       app_version: ''
+      windows: 'ON'
       upload_artifacts: false
     secrets: inherit

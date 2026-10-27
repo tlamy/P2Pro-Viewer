@@ -4,7 +4,8 @@ name: Reusable build
 # workflow in MacwakeFaktura and Owon1041. Called by:
 #   * ci.yml      (development build: every platform compiles, nothing uploaded)
 #   * main.yml    (push to main: Linux compile only, then the tag job)
-#   * release.yml (tag: packaged .deb and .dmg, uploaded for the publish job)
+#   * release.yml (tag: packaged .deb, .dmg, Windows zip and MSI, uploaded for
+#                  the publish job)
 #
 # Forgejo note: on.workflow_call accepts only `inputs` and `outputs`; callers
 # pass `secrets: inherit` and this workflow reads secrets.NAME as if declared.
@@ -41,6 +42,11 @@ on:
         required: false
         type: string
         default: 'macos-arm64'
+      windows:
+        description: Build the Windows zip and MSI.
+        required: false
+        type: string
+        default: 'ON'
 
 jobs:
   build-deb:
@@ -140,4 +146,84 @@ jobs:
         with:
           name: ${{ inputs.artifact_name_prefix }}-macos-${{ steps.get_version.outputs.version }}
           path: dist/*.dmg
+          if-no-files-found: error
+
+  build-windows:
+    if: inputs.windows == 'ON'
+    # The windows-amd64 runner is provisioned by the ansible repo's
+    # configure_windows_build_host.yml (MSVC, CMake, vcpkg, WiX, ImageMagick,
+    # ccache, PowerShell 7), so this job only builds and packages.
+    runs-on: windows-amd64
+    timeout-minutes: 90
+    # The runner keeps vcpkg and ccache across jobs; the project's vcpkg.json
+    # pins the baseline, and vcpkg resolves it from this full clone.
+    env:
+      VCPKG_ROOT: C:\vcpkg
+      VCPKG_INSTALLATION_ROOT: C:\vcpkg
+    steps:
+      # Full history: the fallback version is `git describe --tags`, and the
+      # default single-commit clone carries no tags.
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Get version
+        id: get_version
+        shell: pwsh
+        run: |
+          $appVersion = "${{ inputs.app_version }}"
+          if ($appVersion) {
+              $version = $appVersion
+          } else {
+              $version = (git describe --tags --abbrev=0 2>$null) -replace '^v', ''
+              if (-not $version) { $version = '0.0.0' }
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      # CPack's WIX generator takes the icon from Resources/P2ProViewer.ico.
+      - name: Convert icon to .ico
+        shell: pwsh
+        run: magick "Resources/icon.png" -define icon:auto-resize=256,128,64,48,32,16 "Resources/P2ProViewer.ico"
+      - name: Configure and build
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DAPP_VERSION="${{ steps.get_version.outputs.version }}" `
+            -DUSE_FFMPEG=OFF `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          if ($LASTEXITCODE -ne 0) { throw 'cmake configure failed' }
+          cmake --build build --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'build failed' }
+      - name: Package zip and MSI
+        shell: pwsh
+        run: |
+          $dist = "dist/P2ProViewer-Windows"
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          Copy-Item "build/Release/P2ProViewer.exe" $dist
+          Copy-Item "build/Release/*.dll" $dist -ErrorAction SilentlyContinue
+          Compress-Archive -Path $dist -DestinationPath "dist/P2ProViewer-windows.zip" -Force
+          if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
+              throw "candle.exe not found; the windows-amd64 runner needs WiX Toolset 3.14 on PATH"
+          }
+          Push-Location build
+          try {
+              cpack -G WIX -C Release
+              $rc = $LASTEXITCODE
+          } finally {
+              Pop-Location
+          }
+          if ($rc -ne 0) { throw 'cpack failed' }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Move-Item build/*.msi dist/ -Force
+      - name: Upload artifacts
+        if: ${{ inputs.upload_artifacts }}
+        uses: https://data.forgejo.org/forgejo/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name_prefix }}-windows-${{ steps.get_version.outputs.version }}
+          path: |
+            dist/*.zip
+            dist/*.msi
           if-no-files-found: error

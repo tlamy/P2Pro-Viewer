@@ -14,6 +14,7 @@ jobs:
       app_version: ''
       linux: 'ON'
       macos: 'OFF'
+      windows: 'OFF'
       upload_artifacts: false
     secrets: inherit
 
