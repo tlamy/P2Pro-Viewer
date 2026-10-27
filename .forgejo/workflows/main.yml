@@ -15,7 +15,7 @@ jobs:
       linux: 'ON'
       macos: 'OFF'
       windows: 'OFF'
-      upload_artifacts: false
+      upload_artifacts: 'OFF'
     secrets: inherit
 
   tag:

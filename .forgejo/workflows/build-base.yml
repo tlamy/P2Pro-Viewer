@@ -24,10 +24,18 @@ on:
       # Only the release build uploads: its bundles are what the central
       # publish job (tools/ci publish.yml) downloads. A test build's outputs
       # are never read, and every bundle stored on the forge costs disk.
+      #
+      # A string rather than a boolean, like `linux`/`macos` above: the docker
+      # runner compares workflow_call inputs against the string "true" only, so
+      # a boolean `true` (or a boolean default) reads as false in `if:` and the
+      # upload is skipped without a word — which is how the .deb went missing
+      # from the release and made the publish job fail on "Missing release
+      # assets". Fixed in forgejo-runner v12.7.1 (forgejo/runner#1388); the
+      # forge's docker runner is older, and 'ON'/'OFF' works on both.
       upload_artifacts:
         required: false
-        type: boolean
-        default: true
+        type: string
+        default: 'ON'
       linux:
         description: Build the Debian package.
         required: false
@@ -91,7 +99,7 @@ jobs:
       - name: Package .deb
         run: cd build && cpack -G DEB
       - name: Upload artifacts
-        if: ${{ inputs.upload_artifacts }}
+        if: inputs.upload_artifacts == 'ON'
         uses: https://data.forgejo.org/forgejo/upload-artifact@v4
         with:
           name: ${{ inputs.artifact_name_prefix }}-${{ steps.get_version.outputs.version }}
@@ -141,7 +149,7 @@ jobs:
           hdiutil create -volname P2ProViewer -srcfolder P2ProViewer.app \
             -ov -format UDZO "dist/P2ProViewer-${APP_VERSION}-macos-universal.dmg"
       - name: Upload artifacts
-        if: ${{ inputs.upload_artifacts }}
+        if: inputs.upload_artifacts == 'ON'
         uses: https://data.forgejo.org/forgejo/upload-artifact@v4
         with:
           name: ${{ inputs.artifact_name_prefix }}-macos-${{ steps.get_version.outputs.version }}
@@ -219,7 +227,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Move-Item build/*.msi dist/ -Force
       - name: Upload artifacts
-        if: ${{ inputs.upload_artifacts }}
+        if: inputs.upload_artifacts == 'ON'
         uses: https://data.forgejo.org/forgejo/upload-artifact@v4
         with:
           name: ${{ inputs.artifact_name_prefix }}-windows-${{ steps.get_version.outputs.version }}

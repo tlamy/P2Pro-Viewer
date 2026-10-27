@@ -17,5 +17,5 @@ jobs:
     with:
       app_version: ''
       windows: 'ON'
-      upload_artifacts: false
+      upload_artifacts: 'OFF'
     secrets: inherit
