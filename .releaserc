@@ -4,17 +4,9 @@
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
     "@semantic-release/changelog",
-    ["@semantic-release/github", {
-      "assets": [
-        {"path": "dist/*.deb", "label": "Linux Debian/Ubuntu Package"},
-        {"path": "dist/*.dmg", "label": "macOS Disk Image"},
-        {"path": "dist/*.msi", "label": "Windows Installer (.msi)"},
-        {"path": "dist/P2ProViewer-windows.zip", "label": "Windows Portable (.zip)"}
-      ]
-    }],
     ["@semantic-release/git", {
       "assets": ["CHANGELOG.md", "package.json"],
-      "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      "message": "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}"
     }]
   ]
 }

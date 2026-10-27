@@ -1,0 +1,53 @@
+name: Release
+
+# Tag push starts the release pipeline: build the release on every platform,
+# then let the central publish job (tools/ci publish.yml) create the Forgejo
+# Release with the .deb, the .dmg and the Windows zip/MSI. The version comes
+# from the tag itself.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing tag to retry a partially published release
+        required: false
+        type: string
+
+jobs:
+  version:
+    runs-on: docker
+    container: node:24-bookworm
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - name: Resolve version from the tag
+        id: v
+        run: |
+          REF="${{ inputs.release_tag || forgejo.ref_name }}"
+          echo "version=${REF#v}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    uses: ./.forgejo/workflows/build-base.yml
+    with:
+      app_version: ${{ needs.version.outputs.version }}
+      linux: 'ON'
+      macos: 'ON'
+      windows: 'ON'
+    secrets: inherit
+
+  publish:
+    needs: build
+    uses: tools/ci/.forgejo/workflows/publish.yml@v1
+    with:
+      tag: ${{ inputs.release_tag }}
+      title_prefix: P2Pro Viewer
+      artifact_pattern: package-*
+      # The Debian package, the disk image and the Windows zip/MSI are the
+      # release assets; the stage step only copies those out of the artifacts.
+      stage_command: |
+        mkdir -p dist/release
+        find artifacts -type f \( -name '*.deb' -o -name '*.dmg' -o -name '*.zip' -o -name '*.msi' \) -exec cp {} dist/release/ \;
+      required_assets: .deb, .dmg, .zip, .msi
+    secrets: inherit

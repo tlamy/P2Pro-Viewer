@@ -1,0 +1,21 @@
+name: Build
+
+# Development gate: every platform must compile (to catch platform glitches).
+# Nothing is uploaded -- only release.yml's bundles are ever downloaded -- and
+# `push: branches-ignore: main` keeps branch pushes covered while main.yml owns
+# main.
+on:
+  push:
+    branches-ignore:
+      - 'main'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.forgejo/workflows/build-base.yml
+    with:
+      app_version: ''
+      windows: 'ON'
+      upload_artifacts: false
+    secrets: inherit
