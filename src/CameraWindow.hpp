@@ -11,7 +11,7 @@
 
 class CameraWindow {
 public:
-    CameraWindow(const std::string &title, int width, int height);
+    CameraWindow(std::string title, int width, int height);
 
     ~CameraWindow();
 

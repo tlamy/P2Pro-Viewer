@@ -1,4 +1,4 @@
-#ifndef APPTICON_HPP
+#ifndef APPICON_HPP
 #define APPICON_HPP
 
 // 64x64 RGBA app icon extracted from Resources/icon.png
