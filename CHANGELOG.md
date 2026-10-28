@@ -1,3 +1,15 @@
+## [1.2.3](https://git.h.netwake.cc/tools/p2pro-viewer/compare/v1.2.2...v1.2.3) (2026-10-28)
+
+
+### Bug Fixes
+
+* **packaging:** derive Debian dependencies with dpkg-shlibdeps ([7975291](https://git.h.netwake.cc/tools/p2pro-viewer/commit/797529101b48b188bb9062cd5197e909f932550a))
+
+
+### Performance Improvements
+
+* scaling optimizations ([e0efe47](https://git.h.netwake.cc/tools/p2pro-viewer/commit/e0efe47abc310458f93f6ab135b64c542613d165))
+
 ## [1.2.2](https://github.com/tlamy/P2Pro-Viewer/compare/v1.2.1...v1.2.2) (2026-09-11)
 
 
