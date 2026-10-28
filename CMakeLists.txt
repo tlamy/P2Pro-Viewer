@@ -296,7 +296,14 @@ set(CPACK_PACKAGE_VENDOR "P2Pro")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Viewer for P2 Pro thermal camera")
 set(CPACK_PACKAGE_VERSION "${APP_VERSION}")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "P2Pro Maintainer")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsdl2-2.0-0, libsdl2-ttf-2.0-0, libusb-1.0-0, libavcodec58 | libavcodec59 | libavcodec60, libavformat58 | libavformat59 | libavformat60, libswscale5 | libswscale6 | libswscale7, libavutil56 | libavutil57 | libavutil58")
+# Let dpkg-shlibdeps (dpkg-dev) derive the dependencies from the linked
+# binary instead of pinning them by hand. FFmpeg bumps the soname of every
+# library with each upstream major release (Debian trixie ships
+# libavcodec61/libavformat61/libswscale8/libavutil59), so a hand-written list
+# is stale as soon as the build image moves on and the .deb becomes
+# uninstallable with "unmet dependencies". CPack appends the computed
+# dependencies to CPACK_DEBIAN_PACKAGE_DEPENDS.
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 
 if(WIN32)
     set(CPACK_GENERATOR "WIX")

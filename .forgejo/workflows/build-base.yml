@@ -67,7 +67,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            build-essential cmake ninja-build git ca-certificates pkg-config dpkg-dev nodejs \
+            build-essential cmake ninja-build git ca-certificates pkg-config dpkg-dev file nodejs \
             libsdl2-dev libsdl2-ttf-dev libusb-1.0-0-dev \
             libavcodec-dev libavformat-dev libswscale-dev libavutil-dev
       # Full history: the fallback version is `git describe --tags`, and the

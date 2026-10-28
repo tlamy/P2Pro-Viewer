@@ -19,8 +19,10 @@ brew install sdl2 sdl2_ttf
 ```
 ## Linux (Debian/Ubuntu)
 ```
-sudo apt install libsdl2-dev libusb-1.0-0-dev libavcodec-dev libavformat-dev libswscale-dev libavutil-dev
+sudo apt install libsdl2-dev libsdl2-ttf-dev libusb-1.0-0-dev libavcodec-dev libavformat-dev libswscale-dev libavutil-dev
 ```
+To build a `.deb` with `cpack -G DEB`, also install `dpkg-dev` and `file`: the
+package dependencies are computed from the built binary by `dpkg-shlibdeps`.
 
 ## Windows
 It is recommended to use [vcpkg](https://github.com/microsoft/vcpkg) in manifest mode to manage dependencies.
